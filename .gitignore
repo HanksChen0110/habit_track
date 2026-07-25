@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+output/playwright/
+.superpowers/
+*.log
+.DS_Store
