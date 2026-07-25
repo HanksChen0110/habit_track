@@ -45,7 +45,12 @@ export function InsightSummaryCards({
   return (
     <section className="insight-summary-cards" aria-label="洞察总览">
       {cards.map((card) => (
-        <button key={card.metric} type="button" className="insight-summary-card" onClick={() => onSelect(card.metric)}>
+        <button
+          key={card.metric}
+          type="button"
+          className={`insight-summary-card ${card.metric === 'overall' ? 'is-primary' : ''}`}
+          onClick={() => onSelect(card.metric)}
+        >
           <span>{card.label}</span>
           <strong>{card.value}</strong>
           <small>{card.detail}</small>

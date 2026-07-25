@@ -43,7 +43,7 @@ export function HabitForm({
           placeholder="例如：阅读 30 分钟"
         />
       </label>
-      {nameError && <p className="field-error" id="habit-name-error">{nameError}</p>}
+      {nameError && <p className="field-error" id="habit-name-error" role="alert">{nameError}</p>}
       <label htmlFor="habit-target"><span>每日目标</span></label>
       <div className="target-input">
         <input
@@ -51,6 +51,7 @@ export function HabitForm({
           type="number"
           min="1"
           step="1"
+          inputMode="numeric"
           value={target}
           disabled={targetLocked}
           onChange={(event) => setTarget(event.target.value)}
@@ -59,7 +60,7 @@ export function HabitForm({
         />
         <span>次 / 天</span>
       </div>
-      {targetError && <p className="field-error" id="habit-target-error">{targetError}</p>}
+      {targetError && <p className="field-error" id="habit-target-error" role="alert">{targetError}</p>}
       {targetLocked && (
         <p className="helper-text" id="habit-target-lock">
           该目标已进入历史统计。若要更改，请归档旧习惯后新建。

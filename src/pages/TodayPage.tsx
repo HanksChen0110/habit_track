@@ -80,6 +80,10 @@ export function TodayPage() {
           </div>
         </div>
 
+        <div className="section-heading today-section-heading">
+          <h2>记录日期</h2>
+          <span>可修正最近七天</span>
+        </div>
         <div className="date-strip" aria-label="最近七天">
           {dates.map((date) => (
             <button
@@ -97,6 +101,10 @@ export function TodayPage() {
           ))}
         </div>
 
+        <div className="section-heading today-section-heading habit-list-heading">
+          <h2>{selectedDate === today ? '今天的计划' : '当日记录'}</h2>
+          {activeHabits.length > 0 && <span>{activeHabits.length} 项</span>}
+        </div>
         <div className="habit-list">
           {activeHabits.length === 0 ? (
             <div className="empty-state">

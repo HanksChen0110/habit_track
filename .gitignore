@@ -4,6 +4,9 @@ coverage/
 playwright-report/
 test-results/
 output/playwright/
+.playwright-cli/
+# Generated design-search scratch output; the approved UI baseline is in OpenSpec.
+design-system/
 .superpowers/
 *.log
 .DS_Store

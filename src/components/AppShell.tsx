@@ -14,6 +14,7 @@ export function AppShell() {
   const { notice, error, clearMessages } = useAppStore()
   return (
     <div className="app-frame">
+      <a className="skip-link" href="#main-content">跳至主要内容</a>
       <header className="topbar">
         <Brand />
         <nav className="desktop-nav" aria-label="主导航">
@@ -33,7 +34,7 @@ export function AppShell() {
           {error || notice}
         </div>
       )}
-      <main className="app-content">
+      <main className="app-content" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
       <nav className="mobile-nav" aria-label="主导航">
