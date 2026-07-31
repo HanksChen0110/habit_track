@@ -1,8 +1,106 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../src/App'
 import { addDays } from '../../src/domain/dates'
 import type { Completion, Store } from '../../src/domain/types'
+
+const appStoreMock = vi.hoisted(() => ({
+  initialStore: null as Store | null,
+  publish: null as ((store: Store | null) => void) | null
+}))
+
+const authMock = vi.hoisted(() => ({
+  signOut: vi.fn()
+}))
+
+vi.mock('../../src/auth/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: ReactNode }) => children,
+  useAuth: () => ({
+    status: 'authenticated',
+    user: { id: 'user-1', email: 'me@example.com' },
+    error: null,
+    signUp: vi.fn(),
+    signIn: vi.fn(),
+    signOut: authMock.signOut
+  })
+}))
+
+vi.mock('../../src/app/AppStore', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+
+  interface AppStoreValue {
+    status: 'ready'
+    store: Store | null
+    today: string
+    notice: string
+    error: string
+    beginEmpty: () => Promise<boolean>
+    beginDemo: () => Promise<boolean>
+    commit: (buildNext: (current: Store) => Store) => Promise<boolean>
+    previewImport: () => never
+    confirmImport: () => Promise<boolean>
+    exportJson: () => string
+    reload: () => Promise<boolean>
+    clearMessages: () => void
+  }
+
+  const Context = React.createContext<AppStoreValue | null>(null)
+
+  function AppStoreProvider({ children }: { children: ReactNode }) {
+    const [store, setStore] = React.useState<Store | null>(() =>
+      appStoreMock.initialStore === null
+        ? null
+        : structuredClone(appStoreMock.initialStore)
+    )
+
+    React.useEffect(() => {
+      appStoreMock.publish = (next) =>
+        setStore(next === null ? null : structuredClone(next))
+      return () => {
+        appStoreMock.publish = null
+      }
+    }, [])
+
+    const value = React.useMemo<AppStoreValue>(
+      () => ({
+        status: 'ready',
+        store,
+        today: '2026-07-25',
+        notice: '',
+        error: '',
+        beginEmpty: async () => {
+          setStore({ version: 1, habits: [], completions: [] })
+          return true
+        },
+        beginDemo: async () => false,
+        commit: async (buildNext) => {
+          if (!store) return false
+          setStore(buildNext(structuredClone(store)))
+          return true
+        },
+        previewImport: () => {
+          throw new Error('not used by insights tests')
+        },
+        confirmImport: async () => false,
+        exportJson: () => JSON.stringify(store),
+        reload: async () => true,
+        clearMessages: () => undefined
+      }),
+      [store]
+    )
+
+    return <Context.Provider value={value}>{children}</Context.Provider>
+  }
+
+  function useAppStore() {
+    const value = React.useContext(Context)
+    if (!value) throw new Error('missing test AppStoreProvider')
+    return value
+  }
+
+  return { AppStoreProvider, useAppStore }
+})
 
 function seedInsightStore() {
   const completions: Completion[] = []
@@ -19,7 +117,7 @@ function seedInsightStore() {
     ],
     completions
   }
-  localStorage.setItem('xunji.store.v1', JSON.stringify(store))
+  appStoreMock.initialStore = store
   window.location.hash = '#/insights'
 }
 
@@ -28,7 +126,10 @@ describe('洞察页入口', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-25T12:00:00'))
     localStorage.clear()
-    window.location.hash = ''
+    window.location.hash = '#/today'
+    appStoreMock.initialStore = null
+    appStoreMock.publish = null
+    authMock.signOut.mockReset().mockResolvedValue({ ok: true })
   })
 
   it('adds insights beside today, week and manage', () => {
@@ -44,6 +145,7 @@ describe('洞察页入口', () => {
 
   it('defaults to 30 days and changes the trend range without persisting it', () => {
     seedInsightStore()
+    localStorage.setItem('xunji.store.v1', 'legacy-range-sentinel')
     const before = localStorage.getItem('xunji.store.v1')
     render(<App />)
 
@@ -140,29 +242,19 @@ describe('洞察页入口', () => {
     fireEvent.click(screen.getByRole('button', { name: /查看阅读的趋势/ }))
     expect(screen.getByRole('dialog', { name: '阅读' })).toBeInTheDocument()
 
-    const archivedStore = JSON.parse(localStorage.getItem('xunji.store.v1')!) as Store
+    const archivedStore = structuredClone(appStoreMock.initialStore!)
     archivedStore.habits[0].archivedOn = '2026-07-24'
-    fireEvent(window, new StorageEvent('storage', {
-      key: 'xunji.store.v1',
-      newValue: JSON.stringify(archivedStore)
-    }))
+    act(() => appStoreMock.publish!(archivedStore))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     archivedStore.habits[0].archivedOn = null
-    localStorage.setItem('xunji.store.v1', JSON.stringify(archivedStore))
-    fireEvent(window, new StorageEvent('storage', {
-      key: 'xunji.store.v1',
-      newValue: localStorage.getItem('xunji.store.v1')
-    }))
+    act(() => appStoreMock.publish!(archivedStore))
     fireEvent.click(screen.getByRole('button', { name: /阅读与运动，同时达标/ }))
     expect(screen.getByRole('dialog', { name: /阅读与运动/ })).toBeInTheDocument()
 
-    const pairArchivedStore = JSON.parse(localStorage.getItem('xunji.store.v1')!) as Store
+    const pairArchivedStore = structuredClone(archivedStore)
     pairArchivedStore.habits[1].archivedOn = '2026-07-24'
-    fireEvent(window, new StorageEvent('storage', {
-      key: 'xunji.store.v1',
-      newValue: JSON.stringify(pairArchivedStore)
-    }))
+    act(() => appStoreMock.publish!(pairArchivedStore))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -172,7 +264,7 @@ describe('洞察页入口', () => {
       habits: [{ id: 'new', name: '新习惯', targetPerDay: 1, createdOn: '2026-07-25', archivedOn: null }],
       completions: [{ habitId: 'new', date: '2026-07-25', count: 1 }]
     }
-    localStorage.setItem('xunji.store.v1', JSON.stringify(store))
+    appStoreMock.initialStore = store
     window.location.hash = '#/insights'
 
     render(<App />)
@@ -190,7 +282,7 @@ describe('洞察页入口', () => {
       ],
       completions: []
     }
-    localStorage.setItem('xunji.store.v1', JSON.stringify(shortStore))
+    appStoreMock.initialStore = shortStore
     window.location.hash = '#/insights'
     render(<App />)
 
