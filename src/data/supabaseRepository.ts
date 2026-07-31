@@ -56,10 +56,10 @@ async function readAllPages<T>(
   }
 }
 
-function requireValidCandidate(candidate: Store): Store {
+function requireValidCandidate(candidate: unknown): Store {
   const validation = validateStore(candidate)
   if (!validation.ok) throw new Error(validation.errors.join('；'))
-  return structuredClone(candidate)
+  return structuredClone(candidate) as Store
 }
 
 function requireWrite(source: string, result: WriteResult): void {
@@ -250,13 +250,11 @@ export class SupabaseStoreRepository
   async replace(candidate: Store): Promise<Store> {
     const validCandidate = requireValidCandidate(candidate)
     const client = getSupabaseClient()
+    const result = await client.rpc('replace_user_store', { candidate: validCandidate })
     requireWrite(
       'replace_user_store',
-      await client.rpc('replace_user_store', { candidate: validCandidate })
+      result
     )
-
-    const readback = await this.read()
-    if (readback === null) throw new Error('replace readback returned uninitialized data')
-    return readback
+    return requireValidCandidate(result.data)
   }
 }

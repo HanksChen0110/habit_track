@@ -344,49 +344,26 @@ describe('SupabaseStoreRepository.replace', () => {
     expect(getSupabaseClient).not.toHaveBeenCalled()
   })
 
-  it('calls replace_user_store without an account id and returns only the complete readback', async () => {
+  it('returns the validated server-confirmed Store from replace_user_store without a readback', async () => {
     const candidate = cloneStore(previous)
-    const serverHabit = {
-      id: 'walk',
-      name: 'Server-confirmed walk',
-      target_per_day: 2,
-      created_on: '2026-07-01',
-      archived_on: null
+    const confirmed: Store = {
+      ...cloneStore(previous),
+      habits: [{ ...previous.habits[0], name: 'Server-confirmed walk' }]
     }
-    const { client, dataCalls, rpcCalls } = createClient((call) => {
-      if (call.table === 'user_data_state') {
-        return success([{ initialized_at: '2026-08-01T00:00:00Z' }])
-      }
-      if (call.table === 'habits') return success([serverHabit])
-      if (call.table === 'completions') {
-        return success([{ habit_id: 'walk', date: '2026-07-31', count: 1 }])
-      }
-      throw new Error(`unexpected table: ${call.table}`)
-    })
+    const { client, dataCalls, rpcCalls } = createClient(
+      () => {
+        throw new Error('replace must not read after the RPC')
+      },
+      () => success(confirmed)
+    )
     vi.mocked(getSupabaseClient).mockReturnValue(client)
 
-    await expect(new SupabaseStoreRepository().replace(candidate)).resolves.toEqual({
-      version: 1,
-      habits: [
-        {
-          id: 'walk',
-          name: 'Server-confirmed walk',
-          targetPerDay: 2,
-          createdOn: '2026-07-01',
-          archivedOn: null
-        }
-      ],
-      completions: [{ habitId: 'walk', date: '2026-07-31', count: 1 }]
-    })
+    await expect(new SupabaseStoreRepository().replace(candidate)).resolves.toEqual(confirmed)
     expect(rpcCalls).toEqual([
       { functionName: 'replace_user_store', args: { candidate } }
     ])
     expect(rpcCalls[0].args).not.toHaveProperty('user_id')
-    expect(dataCalls.map((call) => call.table)).toEqual([
-      'user_data_state',
-      'habits',
-      'completions'
-    ])
+    expect(dataCalls).toEqual([])
   })
 
   it('rejects an RPC failure without reading back or mutating candidate', async () => {
@@ -405,31 +382,35 @@ describe('SupabaseStoreRepository.replace', () => {
     expect(candidate).toEqual(snapshot)
   })
 
-  it('rejects when the complete readback fails after a successful RPC', async () => {
+  it('rejects a malformed Store returned by a successful RPC without reading back', async () => {
     const candidate = cloneStore(previous)
     const snapshot = cloneStore(candidate)
-    const { client } = createClient((call) => {
-      if (call.table === 'user_data_state') return failure('READBACK_FAILED')
-      throw new Error(`unexpected table: ${call.table}`)
-    })
-    vi.mocked(getSupabaseClient).mockReturnValue(client)
-
-    await expect(new SupabaseStoreRepository().replace(candidate)).rejects.toMatchObject({
-      cause: { code: 'READBACK_FAILED' }
-    })
-    expect(candidate).toEqual(snapshot)
-  })
-
-  it('rejects a null readback after a successful RPC', async () => {
-    const candidate = cloneStore(previous)
-    const { client } = createClient((call) => {
-      if (call.table === 'user_data_state') return success([])
-      throw new Error(`unexpected table: ${call.table}`)
-    })
+    const { client, dataCalls } = createClient(
+      () => {
+        throw new Error('replace must not read after the RPC')
+      },
+      () => success({ ...candidate, version: 2 })
+    )
     vi.mocked(getSupabaseClient).mockReturnValue(client)
 
     await expect(new SupabaseStoreRepository().replace(candidate)).rejects.toThrow(
-      'replace readback returned uninitialized data'
+      '仅支持 Store 版本 1'
     )
+    expect(dataCalls).toEqual([])
+    expect(candidate).toEqual(snapshot)
+  })
+
+  it('rejects a null result from a successful RPC without reading back', async () => {
+    const candidate = cloneStore(previous)
+    const { client, dataCalls } = createClient(
+      () => {
+        throw new Error('replace must not read after the RPC')
+      },
+      () => success(null)
+    )
+    vi.mocked(getSupabaseClient).mockReturnValue(client)
+
+    await expect(new SupabaseStoreRepository().replace(candidate)).rejects.toThrow()
+    expect(dataCalls).toEqual([])
   })
 })

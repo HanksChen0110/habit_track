@@ -38,7 +38,11 @@ export function Modal({
       if (event.key !== 'Tab') return
 
       const available = focusable()
-      if (available.length === 0) return
+      if (available.length === 0) {
+        event.preventDefault()
+        dialog?.focus()
+        return
+      }
       const first = available[0]
       const last = available.at(-1)!
       if (event.shiftKey && document.activeElement === first) {
@@ -58,7 +62,7 @@ export function Modal({
 
   return (
     <div className={`modal-backdrop ${variant === 'sheet' ? 'is-sheet' : ''}`} onMouseDown={(event) => event.target === event.currentTarget && !closeDisabled && onClose()}>
-      <section ref={dialogRef} className={`modal ${variant === 'sheet' ? 'detail-sheet' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section ref={dialogRef} className={`modal ${variant === 'sheet' ? 'detail-sheet' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
         <div className="modal-heading">
           <div>
             <span className="eyebrow">循迹</span>

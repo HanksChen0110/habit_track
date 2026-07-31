@@ -148,6 +148,26 @@ describe('ManagePage account writes', () => {
     openerFocus.mockRestore()
   })
 
+  it('keeps Tab and Shift+Tab on the dialog when every native control is disabled', async () => {
+    const user = userEvent.setup()
+    const save = deferred<boolean>()
+    mocks.appStore.commit.mockReturnValueOnce(save.promise)
+    renderManage()
+
+    await user.click(screen.getByRole('button', { name: '创建习惯' }))
+    await user.type(screen.getByLabelText('习惯名称'), '散步')
+    await user.click(screen.getByRole('button', { name: '保存习惯' }))
+
+    const dialog = screen.getByRole('dialog', { name: '创建习惯' })
+    await user.tab()
+    expect(dialog).toHaveFocus()
+
+    await user.tab({ shift: true })
+    expect(dialog).toHaveFocus()
+
+    await act(async () => save.resolve(false))
+  })
+
   it('closes create and edit forms only after a true account save result', async () => {
     const user = userEvent.setup()
     mocks.appStore.commit
@@ -291,6 +311,14 @@ describe('RecoveryPage account replacement', () => {
     expect(mocks.appStore.confirmImport).toHaveBeenCalledTimes(1)
     expect(input).toBeDisabled()
     expect(screen.getByRole('button', { name: '恢复中…' })).toBeDisabled()
+
+    await user.upload(
+      input,
+      new File([JSON.stringify(store)], 'duplicate.json', { type: 'application/json' })
+    )
+    await user.click(screen.getByRole('button', { name: '恢复中…' }))
+    expect(mocks.appStore.previewImport).toHaveBeenCalledTimes(1)
+    expect(mocks.appStore.confirmImport).toHaveBeenCalledTimes(1)
 
     await act(async () => replacement.resolve(false))
 
