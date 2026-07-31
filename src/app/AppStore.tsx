@@ -4,124 +4,231 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from 'react'
-import { createDemoStore } from '../data/demo'
-import { LocalStoreRepository, type ImportPreview } from '../data/repository'
+import { useAuth } from '../auth/AuthContext'
+import {
+  previewImport as previewStoreImport,
+  serialize,
+  type ImportPreview
+} from '../data/repository'
+import { SupabaseStoreRepository } from '../data/supabaseRepository'
 import { formatLocalDate } from '../domain/dates'
 import { emptyStore } from '../domain/store'
 import type { Store } from '../domain/types'
 
+export type { ImportPreview } from '../data/repository'
+
+export type AppStoreStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
+
 interface AppStoreValue {
+  status: AppStoreStatus
   store: Store | null
   today: string
   notice: string
   error: string
-  beginEmpty: () => void
-  beginDemo: () => void
-  commit: (buildNext: (current: Store) => Store, successMessage?: string) => boolean
+  beginEmpty: () => boolean
+  beginDemo: () => boolean
+  commit: (
+    buildNext: (current: Store) => Store,
+    successMessage?: string
+  ) => boolean
   previewImport: (raw: string) => ImportPreview
   confirmImport: (preview: ImportPreview) => boolean
   exportJson: () => string
+  reload: () => Promise<boolean>
   clearMessages: () => void
 }
 
+interface AccountStoreState {
+  sessionGeneration: number
+  userId: string | null
+  status: AppStoreStatus
+  store: Store | null
+  notice: string
+  error: string
+}
+
+const READ_FAILURE = '暂时无法读取账号数据，请重试。'
+
 const AppStoreContext = createContext<AppStoreValue | null>(null)
 
-export function AppStoreProvider({ children }: { children: ReactNode }) {
-  const today = useMemo(() => formatLocalDate(new Date()), [])
-  const repository = useMemo(() => new LocalStoreRepository(() => today), [today])
-  const [store, setStore] = useState<Store | null>(() => {
-    try {
-      return repository.read()
-    } catch {
-      return null
-    }
-  })
-  const [notice, setNotice] = useState('')
-  const [error, setError] = useState(() => {
-    try {
-      repository.read()
-      return ''
-    } catch (readError) {
-      return readError instanceof Error ? readError.message : '本地数据无法读取'
-    }
-  })
+function idleState(sessionGeneration: number): AccountStoreState {
+  return {
+    sessionGeneration,
+    userId: null,
+    status: 'idle',
+    store: null,
+    notice: '',
+    error: ''
+  }
+}
 
-  const writeInitial = useCallback(
-    (candidate: Store) => {
+function loadingState(sessionGeneration: number, userId: string): AccountStoreState {
+  return {
+    sessionGeneration,
+    userId,
+    status: 'loading',
+    store: null,
+    notice: '',
+    error: ''
+  }
+}
+
+export function AppStoreProvider({ children }: { children: ReactNode }) {
+  const auth = useAuth()
+  const today = useMemo(() => formatLocalDate(new Date()), [])
+  const repository = useMemo(() => new SupabaseStoreRepository(), [])
+  const loadGenerationRef = useRef(0)
+  const authUserIdRef = useRef<string | null>(null)
+  const authKeyRef = useRef('initial')
+  const sessionGenerationRef = useRef(0)
+
+  const authUserId = auth.status === 'authenticated' ? auth.user?.id ?? null : null
+  const authKey = `${auth.status}:${authUserId ?? ''}`
+  if (authKeyRef.current !== authKey) {
+    authKeyRef.current = authKey
+    sessionGenerationRef.current += 1
+    loadGenerationRef.current += 1
+  }
+  authUserIdRef.current = authUserId
+  const sessionGeneration = sessionGenerationRef.current
+
+  const [accountState, setAccountState] = useState<AccountStoreState>(() =>
+    authUserId
+      ? loadingState(sessionGeneration, authUserId)
+      : idleState(sessionGeneration)
+  )
+
+  const loadForUser = useCallback(
+    async (userId: string, requestedSessionGeneration: number): Promise<boolean> => {
+      if (
+        authUserIdRef.current !== userId ||
+        sessionGenerationRef.current !== requestedSessionGeneration
+      ) {
+        return false
+      }
+
+      const loadGeneration = ++loadGenerationRef.current
+      setAccountState(loadingState(requestedSessionGeneration, userId))
+
       try {
-        const saved = repository.write(candidate)
-        setStore(saved)
-        setError('')
-      } catch (writeError) {
-        setError(writeError instanceof Error ? writeError.message : '保存失败')
+        const incoming = await repository.read()
+        if (
+          authUserIdRef.current !== userId ||
+          sessionGenerationRef.current !== requestedSessionGeneration ||
+          loadGenerationRef.current !== loadGeneration
+        ) {
+          return false
+        }
+
+        setAccountState({
+          sessionGeneration: requestedSessionGeneration,
+          userId,
+          status: 'ready',
+          store: incoming,
+          notice: '',
+          error: ''
+        })
+        return true
+      } catch {
+        if (
+          authUserIdRef.current !== userId ||
+          sessionGenerationRef.current !== requestedSessionGeneration ||
+          loadGenerationRef.current !== loadGeneration
+        ) {
+          return false
+        }
+
+        setAccountState({
+          sessionGeneration: requestedSessionGeneration,
+          userId,
+          status: 'error',
+          store: null,
+          notice: '',
+          error: READ_FAILURE
+        })
+        return false
       }
     },
     [repository]
   )
+
+  useEffect(() => {
+    if (authUserId) {
+      void loadForUser(authUserId, sessionGeneration)
+      return
+    }
+
+    setAccountState(idleState(sessionGeneration))
+  }, [authUserId, loadForUser, sessionGeneration])
 
   useEffect(
-    () =>
-      repository.subscribe((incoming) => {
-        setStore(incoming)
-        setNotice('数据已在另一页面更新')
-        setError('')
-      }),
-    [repository]
+    () => () => {
+      authUserIdRef.current = null
+      loadGenerationRef.current += 1
+    },
+    []
   )
 
-  const commit = useCallback(
-    (buildNext: (current: Store) => Store, successMessage = '已保存') => {
-      if (!store) return false
-      try {
-        const candidate = buildNext(structuredClone(store))
-        const saved = repository.write(candidate)
-        setStore(saved)
-        setNotice(successMessage)
-        setError('')
-        return true
-      } catch (writeError) {
-        setError(writeError instanceof Error ? writeError.message : '未保存，请重试')
-        return false
-      }
-    },
-    [repository, store]
-  )
+  const stateMatchesSession =
+    accountState.sessionGeneration === sessionGeneration &&
+    accountState.userId === authUserId
+  const visibleState: AccountStoreState = authUserId
+    ? stateMatchesSession
+      ? accountState
+      : loadingState(sessionGeneration, authUserId)
+    : idleState(sessionGeneration)
 
-  const value: AppStoreValue = {
-    store,
-    today,
-    notice,
-    error,
-    beginEmpty: () => writeInitial(emptyStore()),
-    beginDemo: () => writeInitial(createDemoStore(today)),
-    commit,
-    previewImport: (raw) => repository.previewImport(raw),
-    confirmImport: (preview) => {
-      try {
-        const saved = repository.write(preview.store)
-        setStore(saved)
-        setNotice('数据已完整替换')
-        setError('')
-        return true
-      } catch (writeError) {
-        setError(writeError instanceof Error ? writeError.message : '导入失败')
-        return false
-      }
-    },
-    exportJson: () => repository.serialize(store ?? emptyStore()),
-    clearMessages: () => {
-      setNotice('')
-      setError('')
-    }
-  }
+  const reload = useCallback(() => {
+    const userId = authUserIdRef.current
+    if (!userId) return Promise.resolve(false)
+    return loadForUser(userId, sessionGenerationRef.current)
+  }, [loadForUser])
+
+  const pendingWrite = useCallback(() => false, [])
+  const previewImport = useCallback(
+    (raw: string) => previewStoreImport(raw, today),
+    [today]
+  )
+  const exportJson = useCallback(
+    () => serialize(visibleState.store ?? emptyStore(), today),
+    [today, visibleState.store]
+  )
+  const clearMessages = useCallback(() => {
+    setAccountState((current) =>
+      current.sessionGeneration === sessionGenerationRef.current &&
+      current.userId === authUserIdRef.current
+        ? { ...current, notice: '', error: '' }
+        : current
+    )
+  }, [])
+
+  const value = useMemo<AppStoreValue>(
+    () => ({
+      status: visibleState.status,
+      store: visibleState.store,
+      today,
+      notice: visibleState.notice,
+      error: visibleState.error,
+      beginEmpty: pendingWrite,
+      beginDemo: pendingWrite,
+      commit: pendingWrite,
+      previewImport,
+      confirmImport: pendingWrite,
+      exportJson,
+      reload,
+      clearMessages
+    }),
+    [clearMessages, exportJson, pendingWrite, previewImport, reload, today, visibleState]
+  )
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>
 }
 
-export function useAppStore() {
+export function useAppStore(): AppStoreValue {
   const value = useContext(AppStoreContext)
   if (!value) throw new Error('useAppStore 必须在 AppStoreProvider 内使用')
   return value
