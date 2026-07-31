@@ -1,17 +1,32 @@
 :root {
   font-family: "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #1e191a;
-  background: #e9ecea;
-  --canvas: #e9ecea;
-  --surface: #ffffff;
-  --surface-muted: #f2f4f2;
-  --ink: #20191b;
-  --ink-soft: #666d69;
-  --line: #dfe3e0;
-  --accent: #a98bee;
-  --accent-soft: #f2edff;
-  --danger: #7f3036;
-  --focus-ring: rgba(151, 113, 238, .38);
+  --color-brand: oklch(70.4% 0.144 296.5);
+  --color-brand-deep: oklch(49.2% 0.165 293.3);
+  --color-brand-soft: oklch(95.5% 0.025 298.6);
+  --color-bg: oklch(94% 0.004 157.2);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(96.5% 0.003 145.5);
+  --color-input: oklch(98.7% 0.002 145.6);
+  --color-text-primary: oklch(22% 0.008 4.2);
+  --color-text-action: oklch(22.3% 0.012 359);
+  --color-text-secondary: oklch(52.7% 0.011 161.1);
+  --color-text-tertiary: oklch(55.9% 0.009 156.9);
+  --color-border: oklch(91.2% 0.006 153.8);
+  --color-danger: oklch(42.3% 0.11 18.6);
+  --color-error: oklch(50.5% 0.131 17.7);
+  --color-focus-ring: oklch(70.4% 0.144 296.5 / .38);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  --canvas: var(--color-bg);
+  --surface: var(--color-surface);
+  --surface-muted: var(--color-surface-muted);
+  --ink: var(--color-text-action);
+  --ink-soft: var(--color-text-secondary);
+  --line: var(--color-border);
+  --accent: var(--color-brand);
+  --accent-soft: var(--color-brand-soft);
+  --danger: var(--color-danger);
+  --focus-ring: var(--color-focus-ring);
   --shadow-float: 0 16px 40px rgba(34, 31, 32, .05);
   --shadow-panel: 0 24px 70px rgba(38, 35, 36, .07);
   --radius-control: 12px;
@@ -323,6 +338,32 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .toast.is-error { background: #8d3540; }
 
 .onboarding { min-height: 100vh; padding: 42px max(24px, calc((100vw - 1160px) / 2)); position: relative; overflow: hidden; background: #e9ecea; }
+.account-page { min-height: 100vh; padding: 24px; position: relative; overflow: hidden; display: grid; place-items: center; background: var(--color-bg); }
+.account-page > .onboarding-pattern { z-index: 0; }
+.account-panel { position: relative; z-index: 1; width: min(100%, 480px); padding: 38px; border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); box-shadow: var(--shadow-panel); animation: page-in .24s ease both; }
+.account-copy { display: grid; gap: 12px; margin: 30px 0; }
+.account-copy h1, .account-copy p, .account-switch, .account-boundary, .account-error { margin: 0; }
+.account-copy h1 { font-size: clamp(1.875rem, 3vw, 2.625rem); font-weight: 760; line-height: 1.1; letter-spacing: -.055em; text-wrap: pretty; }
+.account-copy p:last-child { max-width: 65ch; color: var(--color-text-secondary); line-height: 1.6; text-wrap: pretty; }
+.account-form { display: grid; gap: 8px; }
+.account-form label { margin-top: 10px; color: var(--color-text-primary); font-size: .75rem; font-weight: 650; }
+.account-form input { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-input); color: var(--color-text-primary); font-size: 1rem; transition: background var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast); }
+.account-form input:hover { border-color: var(--color-text-tertiary); }
+.account-form input:focus { border-color: var(--color-brand); background: var(--color-surface); box-shadow: 0 0 0 3px var(--color-brand-soft); }
+.account-primary-button, .account-secondary-button { min-height: 48px; padding: 0 18px; border-radius: var(--radius-control); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 650; transition: transform var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast); }
+.account-primary-button { margin-top: 16px; border: 1px solid var(--color-text-action); background: var(--color-text-action); color: var(--color-surface); }
+.account-secondary-button { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-action); }
+.account-primary-button:hover:not(:disabled), .account-secondary-button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-float); }
+.account-primary-button:active:not(:disabled), .account-secondary-button:active:not(:disabled) { transform: translateY(0); }
+.account-primary-button:disabled, .account-secondary-button:disabled, .account-switch button:disabled, .choice-card:disabled { opacity: .58; cursor: not-allowed; }
+.account-switch { min-height: 44px; margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 4px; color: var(--color-text-secondary); font-size: .8125rem; }
+.account-switch button { min-height: 44px; padding: 0 8px; border: 0; background: transparent; color: var(--color-brand-deep); cursor: pointer; font-weight: 650; }
+.account-error { margin-top: 18px; padding: 12px; border: 1px solid var(--color-error); border-radius: var(--radius-control); color: var(--color-error); font-size: .8125rem; line-height: 1.6; text-wrap: pretty; }
+.account-boundary { margin-top: 18px; color: var(--color-text-secondary); font-size: .75rem; line-height: 1.6; text-align: center; }
+.account-status .account-copy { margin-bottom: 0; }
+.account-error-actions { margin-top: 24px; display: grid; gap: 12px; }
+.account-error-actions .account-primary-button { margin-top: 0; }
+.onboarding-error { position: relative; z-index: 1; max-width: 760px; margin-right: auto; margin-left: auto; }
 .recovery-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .recovery-card { width: min(100%, 520px); display: grid; gap: 24px; padding: clamp(28px, 6vw, 52px); border: 1px solid #e0e4e1; border-radius: 24px; background: rgba(255,255,255,.94); box-shadow: 0 24px 70px rgba(38,35,36,.08); }
 .recovery-copy { display: grid; gap: 10px; }
@@ -417,6 +458,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .manage-row { align-items: stretch; flex-direction: column; }
   .row-actions button { flex: 1; }
   .onboarding { padding: 16px; }
+  .account-page { padding: 9px; }
+  .account-panel { padding: 24px; border-radius: 20px; }
   .onboarding-copy { margin: 12vh auto 34px; }
   .onboarding-copy h1 { font-size: 46px; }
   .onboarding-copy p { font-size: 14px; }

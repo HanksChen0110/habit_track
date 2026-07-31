@@ -1,15 +1,23 @@
+import { useState } from 'react'
 import { ArrowRight, Eye, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../app/AppStore'
 import { Brand } from '../components/Brand'
 
 export function OnboardingPage() {
-  const { beginDemo, beginEmpty } = useAppStore()
+  const { beginDemo, beginEmpty, error } = useAppStore()
   const navigate = useNavigate()
-  const choose = (mode: 'empty' | 'demo') => {
-    if (mode === 'empty') beginEmpty()
-    else beginDemo()
-    navigate('/today', { replace: true })
+  const [busyMode, setBusyMode] = useState<'empty' | 'demo' | null>(null)
+
+  const choose = async (mode: 'empty' | 'demo') => {
+    if (busyMode) return
+    setBusyMode(mode)
+    try {
+      const saved = mode === 'empty' ? await beginEmpty() : await beginDemo()
+      if (saved) navigate('/today', { replace: true })
+    } finally {
+      setBusyMode(null)
+    }
   }
 
   return (
@@ -25,29 +33,32 @@ export function OnboardingPage() {
         <button
           className="choice-card primary-choice"
           type="button"
-          aria-label="开始记录"
-          onClick={() => choose('empty')}
+          aria-label={busyMode === 'empty' ? '开始中…' : '开始记录'}
+          disabled={busyMode !== null}
+          onClick={() => void choose('empty')}
         >
           <span className="choice-icon"><ArrowRight size={20} /></span>
           <span>
-            <strong>开始记录</strong>
+            <strong>{busyMode === 'empty' ? '开始中…' : '开始记录'}</strong>
             <small>从空白开始，创建你的第一个每日习惯</small>
           </span>
         </button>
         <button
           className="choice-card"
           type="button"
-          aria-label="载入示例"
-          onClick={() => choose('demo')}
+          aria-label={busyMode === 'demo' ? '载入中…' : '载入示例'}
+          disabled={busyMode !== null}
+          onClick={() => void choose('demo')}
         >
           <span className="choice-icon lavender"><Eye size={20} /></span>
           <span>
-            <strong>载入示例</strong>
+            <strong>{busyMode === 'demo' ? '载入中…' : '载入示例'}</strong>
             <small>用三项示例习惯立即体验完整周报</small>
           </span>
         </button>
       </section>
-      <footer><Sparkles size={15} /> 数据仅保存在当前浏览器</footer>
+      {error ? <p className="account-error onboarding-error" role="alert">{error}</p> : null}
+      <footer><Sparkles size={15} /> 记录保存在当前账号的本机数据库</footer>
     </main>
   )
 }
