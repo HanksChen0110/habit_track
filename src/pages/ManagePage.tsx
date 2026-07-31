@@ -1,10 +1,9 @@
 import { Archive, Download, FileJson, Pencil, Plus, Upload } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useAppStore } from '../app/AppStore'
+import { useAppStore, type ImportPreview } from '../app/AppStore'
 import { HabitForm } from '../components/HabitForm'
 import { Modal } from '../components/Modal'
-import type { ImportPreview } from '../data/repository'
 import { archiveHabit, createHabit, editHabit } from '../domain/store'
 import type { Habit } from '../domain/types'
 
@@ -21,6 +20,7 @@ export function ManagePage() {
   const [archiveCandidate, setArchiveCandidate] = useState<Habit | null>(null)
   const [importCandidate, setImportCandidate] = useState<ImportPreview | null>(null)
   const [importError, setImportError] = useState('')
+  const [pendingAction, setPendingAction] = useState<'habit' | 'archive' | 'import' | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const focusedRowRef = useRef<HTMLElement>(null)
   const [searchParams] = useSearchParams()
@@ -35,21 +35,27 @@ export function ManagePage() {
     focusedRowRef.current?.focus()
   }, [focusedHabitId])
 
-  const saveHabit = (values: { name: string; targetPerDay: number }) => {
-    const saved =
-      formMode === 'create'
-        ? commit((current) =>
-            createHabit(current, {
-              id: crypto.randomUUID(),
-              name: values.name,
-              targetPerDay: values.targetPerDay,
-              today
-            })
-          )
-        : formMode
-          ? commit((current) => editHabit(current, formMode.id, values, today))
-          : false
-    if (saved) setFormMode(null)
+  const saveHabit = async (values: { name: string; targetPerDay: number }) => {
+    if (!formMode || pendingAction !== null) return
+    setPendingAction('habit')
+    try {
+      const saved =
+        formMode === 'create'
+          ? await commit((current) =>
+              createHabit(current, {
+                id: crypto.randomUUID(),
+                name: values.name,
+                targetPerDay: values.targetPerDay,
+                today
+              })
+            )
+          : await commit((current) => editHabit(current, formMode.id, values, today))
+      if (saved) setFormMode(null)
+    } catch {
+      // AppStore owns the persistent account write error.
+    } finally {
+      setPendingAction(null)
+    }
   }
 
   const download = () => {
@@ -62,6 +68,22 @@ export function ManagePage() {
     URL.revokeObjectURL(url)
   }
 
+  const archiveSelectedHabit = async () => {
+    if (!archiveCandidate || pendingAction !== null) return
+    setPendingAction('archive')
+    try {
+      const saved = await commit(
+        (current) => archiveHabit(current, archiveCandidate.id, today),
+        '已归档'
+      )
+      if (saved) setArchiveCandidate(null)
+    } catch {
+      // AppStore owns the persistent account write error.
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
   const chooseImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -72,6 +94,18 @@ export function ManagePage() {
       setImportError(error instanceof Error ? error.message : '导入文件无效')
     } finally {
       event.target.value = ''
+    }
+  }
+
+  const replaceWithImport = async () => {
+    if (!importCandidate || pendingAction !== null) return
+    setPendingAction('import')
+    try {
+      if (await confirmImport(importCandidate)) setImportCandidate(null)
+    } catch {
+      // AppStore owns the persistent account write error.
+    } finally {
+      setPendingAction(null)
     }
   }
 
@@ -132,7 +166,7 @@ export function ManagePage() {
         <FileJson size={22} />
         <span className="eyebrow">本地数据</span>
         <h2>备份与迁移</h2>
-        <p>数据只保存在当前浏览器。建议定期导出 JSON 备份。</p>
+        <p>这里管理当前账号的本机数据，可导出完整 JSON 备份。</p>
         <button className="button primary full" type="button" onClick={download}>
           <Download size={17} /> 导出完整备份
         </button>
@@ -148,66 +182,70 @@ export function ManagePage() {
           onChange={chooseImport}
         />
         {importError && <p className="import-error" role="alert">{importError}</p>}
-        <small>导入会先校验，确认后才完整替换现有数据。</small>
+        <small>导入会先校验，确认后才完整替换当前账号的本机数据库数据。</small>
       </aside>
 
       {formMode && (
-        <Modal title={formMode === 'create' ? '创建习惯' : '编辑习惯'} onClose={() => setFormMode(null)}>
-          <HabitForm
-            habit={formMode === 'create' ? undefined : formMode}
-            targetLocked={
-              formMode !== 'create' &&
-              (formMode.createdOn !== today ||
-                store.completions.some((item) => item.habitId === formMode.id))
-            }
-            onSubmit={saveHabit}
-            onCancel={() => setFormMode(null)}
-          />
+        <Modal title={formMode === 'create' ? '创建习惯' : '编辑习惯'} onClose={() => pendingAction !== 'habit' && setFormMode(null)}>
+          <fieldset
+            disabled={pendingAction === 'habit'}
+            aria-busy={pendingAction === 'habit'}
+            style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
+          >
+            <HabitForm
+              habit={formMode === 'create' ? undefined : formMode}
+              targetLocked={
+                formMode !== 'create' &&
+                (formMode.createdOn !== today ||
+                  store.completions.some((item) => item.habitId === formMode.id))
+              }
+              onSubmit={saveHabit}
+              onCancel={() => setFormMode(null)}
+            />
+          </fieldset>
         </Modal>
       )}
 
       {archiveCandidate && (
-        <Modal title="归档习惯" onClose={() => setArchiveCandidate(null)}>
+        <Modal title="归档习惯" onClose={() => pendingAction !== 'archive' && setArchiveCandidate(null)}>
           <div className="confirm-copy">
             <p>归档“{archiveCandidate.name}”后，它在今天仍计入计划，从明天起不再出现。</p>
             <p className="helper-text">所有历史记录和周报都会保留。</p>
           </div>
           <div className="form-actions">
-            <button className="button secondary" type="button" onClick={() => setArchiveCandidate(null)}>取消</button>
+            <button className="button secondary" type="button" disabled={pendingAction === 'archive'} onClick={() => setArchiveCandidate(null)}>取消</button>
             <button
               className="button danger"
               type="button"
-              onClick={() => {
-                if (commit((current) => archiveHabit(current, archiveCandidate.id, today), '已归档')) {
-                  setArchiveCandidate(null)
-                }
-              }}
+              disabled={pendingAction === 'archive'}
+              onClick={() => void archiveSelectedHabit()}
             >
-              确认归档
+              {pendingAction === 'archive' ? '归档中…' : '确认归档'}
             </button>
           </div>
         </Modal>
       )}
 
       {importCandidate && (
-        <Modal title="确认替换数据" onClose={() => setImportCandidate(null)}>
+        <Modal title="确认替换数据" onClose={() => pendingAction !== 'import' && setImportCandidate(null)}>
           <div className="import-preview">
-            <p>文件已通过完整校验。确认后将替换当前浏览器里的全部数据。</p>
+            <p>
+              文件已通过完整校验。这份完整 JSON 备份只会替换当前账号本机数据库中的全部习惯与完成记录；替换失败时，原数据不会被覆盖。
+            </p>
             <dl>
               <div><dt>习惯</dt><dd>{importCandidate.habitCount} 项</dd></div>
               <div><dt>完成记录</dt><dd>{importCandidate.completionCount} 条</dd></div>
             </dl>
           </div>
           <div className="form-actions">
-            <button className="button secondary" type="button" onClick={() => setImportCandidate(null)}>取消</button>
+            <button className="button secondary" type="button" disabled={pendingAction === 'import'} onClick={() => setImportCandidate(null)}>取消</button>
             <button
               className="button danger"
               type="button"
-              onClick={() => {
-                if (confirmImport(importCandidate)) setImportCandidate(null)
-              }}
+              disabled={pendingAction === 'import'}
+              onClick={() => void replaceWithImport()}
             >
-              完整替换
+              {pendingAction === 'import' ? '替换中…' : '完整替换'}
             </button>
           </div>
         </Modal>
