@@ -52,6 +52,11 @@ interface CredentialResponse {
   error: unknown
 }
 
+interface PendingCredentialRequest {
+  email: string
+  startUserId: string | null
+}
+
 const BACKEND_UNAVAILABLE: AuthFailure = {
   category: 'backend_unavailable',
   message: '本地后端暂时不可用，请确认本地服务已启动。'
@@ -107,14 +112,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [error, setError] = useState<AuthFailure | null>(null)
   const clientRef = useRef<SupabaseClient | null>(null)
+  const currentUserRef = useRef<AuthUser | null>(null)
+  const pendingCredentialRef = useRef<PendingCredentialRequest | null>(null)
   const sessionVersionRef = useRef(0)
 
   const applySession = useCallback((session: Session | null) => {
     sessionVersionRef.current += 1
     if (session) {
-      setUser(publicUser(session))
+      const nextUser = publicUser(session)
+      currentUserRef.current = nextUser
+      setUser(nextUser)
       setStatus('authenticated')
     } else {
+      currentUserRef.current = null
       setUser(null)
       setStatus('signed_out')
     }
@@ -123,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applyRecoveryFailure = useCallback((cause: unknown) => {
     sessionVersionRef.current += 1
+    currentUserRef.current = null
     setUser(null)
     setError(mapAuthError(cause, true))
     setStatus('error')
@@ -136,8 +147,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       client = getSupabaseClient()
       clientRef.current = client
-      const subscription = client.auth.onAuthStateChange((_event, session) => {
-        if (active) applySession(session)
+      const subscription = client.auth.onAuthStateChange((event, session) => {
+        if (!active) return
+        const pending = pendingCredentialRef.current
+        const currentUserId = currentUserRef.current?.id
+        const incomingUserId = session?.user.id
+        const isRequestedAccount =
+          event === 'SIGNED_IN' &&
+          session?.user.email?.trim().toLowerCase() === pending?.email
+
+        if (
+          isRequestedAccount &&
+          currentUserId &&
+          incomingUserId &&
+          currentUserId !== incomingUserId &&
+          currentUserId !== pending?.startUserId
+        ) {
+          return
+        }
+
+        applySession(session)
       })
       unsubscribe = () => subscription.data.subscription.unsubscribe()
     } catch (cause) {
@@ -175,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const runCredentialRequest = useCallback(
     async (
+      email: string,
       request: (client: SupabaseClient) => PromiseLike<CredentialResponse>
     ): Promise<AuthResult> => {
       const client = clientRef.current
@@ -184,10 +214,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const requestVersion = ++sessionVersionRef.current
+      const startStatus = status
+      const startUser = user
+      const pendingRequest: PendingCredentialRequest = {
+        email: email.trim().toLowerCase(),
+        startUserId: currentUserRef.current?.id ?? null
+      }
+      pendingCredentialRef.current = pendingRequest
       const fail = (failure: AuthFailure): AuthResult => {
         if (requestVersion === sessionVersionRef.current) {
-          setUser(null)
-          setStatus('signed_out')
+          currentUserRef.current = startUser
+          setUser(startUser)
+          setStatus(startStatus)
           setError(failure)
         }
         return { ok: false, error: failure }
@@ -202,20 +240,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: true }
       } catch (cause) {
         return fail(mapAuthError(cause))
+      } finally {
+        if (pendingCredentialRef.current === pendingRequest) {
+          pendingCredentialRef.current = null
+        }
       }
     },
-    [applySession]
+    [applySession, status, user]
   )
 
   const signUp = useCallback(
     (email: string, password: string) =>
-      runCredentialRequest((client) => client.auth.signUp({ email, password })),
+      runCredentialRequest(email, (client) => client.auth.signUp({ email, password })),
     [runCredentialRequest]
   )
 
   const signIn = useCallback(
     (email: string, password: string) =>
-      runCredentialRequest((client) => client.auth.signInWithPassword({ email, password })),
+      runCredentialRequest(email, (client) =>
+        client.auth.signInWithPassword({ email, password })
+      ),
     [runCredentialRequest]
   )
 

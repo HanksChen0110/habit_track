@@ -161,6 +161,35 @@ describe('AuthContext', () => {
     expect(JSON.stringify(result.current.error)).not.toContain('auth.users')
   })
 
+  it('keeps the current authenticated account when switching sign-in fails', async () => {
+    authMock.getSession.mockResolvedValueOnce({
+      data: { session: createSession('user-a', 'a@example.com') },
+      error: null
+    })
+    authMock.signInWithPassword.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'invalid_credentials',
+        message: 'raw authentication failure'
+      }
+    })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.status).toBe('authenticated'))
+
+    await act(async () => {
+      await result.current.signIn('user-b@example.com', 'wrong-password')
+    })
+
+    expect(result.current.status).toBe('authenticated')
+    expect(result.current.user).toEqual({ id: 'user-a', email: 'a@example.com' })
+    expect(result.current.error).toEqual({
+      category: 'invalid_credentials',
+      message: '邮箱或密码不正确。'
+    })
+  })
+
   it.each([
     [
       'email_exists',
@@ -271,6 +300,38 @@ describe('AuthContext', () => {
     })
     act(() => {
       authMock.listener?.('SIGNED_IN', createSession('user-b', 'b@example.com'))
+    })
+
+    await act(async () => {
+      signIn.resolve({
+        data: {
+          user: createUser('user-a', 'a@example.com'),
+          session: createSession('user-a', 'a@example.com')
+        },
+        error: null
+      })
+      await signInPromise
+    })
+
+    expect(result.current.status).toBe('authenticated')
+    expect(result.current.user).toEqual({ id: 'user-b', email: 'b@example.com' })
+  })
+
+  it('ignores a requested-account SIGNED_IN event after another account takes over', async () => {
+    const { result } = await renderSignedOut()
+    const signIn = deferred<{
+      data: { user: User; session: Session }
+      error: null
+    }>()
+    authMock.signInWithPassword.mockReturnValueOnce(signIn.promise)
+
+    let signInPromise: ReturnType<typeof result.current.signIn>
+    act(() => {
+      signInPromise = result.current.signIn('a@example.com', 'not-logged')
+    })
+    act(() => {
+      authMock.listener?.('SIGNED_IN', createSession('user-b', 'b@example.com'))
+      authMock.listener?.('SIGNED_IN', createSession('user-a', 'a@example.com'))
     })
 
     await act(async () => {
