@@ -8,66 +8,36 @@ export interface ImportPreview {
   completionCount: number
 }
 
-export class LocalStoreRepository {
-  readonly key = 'xunji.store.v1'
+export interface StoreRepository {
+  read(): Promise<Store | null>
+  commit(previous: Store, candidate: Store): Promise<Store>
+  replace(candidate: Store): Promise<Store>
+  previewImport(raw: string): ImportPreview
+  serialize(store: Store): string
+}
 
-  constructor(private readonly getToday = () => formatLocalDate(new Date())) {}
+function requireValidStore(candidate: unknown, today: string): Store {
+  const result = validateStore(candidate, today)
+  if (!result.ok) throw new Error(result.errors.join('；'))
+  return structuredClone(candidate as Store)
+}
 
-  read(): Store | null {
-    const raw = localStorage.getItem(this.key)
-    if (raw === null) return null
-
-    try {
-      const candidate: unknown = JSON.parse(raw)
-      const result = validateStore(candidate, this.getToday())
-      if (!result.ok) throw new Error(result.errors.join('；'))
-      return structuredClone(candidate as Store)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '未知错误'
-      throw new Error(`本地数据无法读取：${message}`)
-    }
+export function previewImport(raw: string, today = formatLocalDate(new Date())): ImportPreview {
+  let candidate: unknown
+  try {
+    candidate = JSON.parse(raw)
+  } catch {
+    throw new Error('无法解析 JSON 文件')
   }
 
-  write(candidate: Store): Store {
-    const result = validateStore(candidate, this.getToday())
-    if (!result.ok) throw new Error(result.errors.join('；'))
-    const snapshot = structuredClone(candidate)
-    localStorage.setItem(this.key, JSON.stringify(snapshot))
-    return snapshot
+  const store = requireValidStore(candidate, today)
+  return {
+    store,
+    habitCount: store.habits.length,
+    completionCount: store.completions.length
   }
+}
 
-  previewImport(raw: string): ImportPreview {
-    let candidate: unknown
-    try {
-      candidate = JSON.parse(raw)
-    } catch {
-      throw new Error('无法解析 JSON 文件')
-    }
-
-    const result = validateStore(candidate, this.getToday())
-    if (!result.ok) throw new Error(result.errors.join('；'))
-    const store = structuredClone(candidate as Store)
-    return {
-      store,
-      habitCount: store.habits.length,
-      completionCount: store.completions.length
-    }
-  }
-
-  serialize(store: Store): string {
-    return JSON.stringify(store, null, 2)
-  }
-
-  subscribe(listener: (store: Store) => void): () => void {
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== this.key || event.newValue === null) return
-      try {
-        listener(this.previewImport(event.newValue).store)
-      } catch {
-        // The current valid snapshot remains visible when another tab writes corrupt data.
-      }
-    }
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
-  }
+export function serialize(store: Store, today = formatLocalDate(new Date())): string {
+  return JSON.stringify(requireValidStore(store, today), null, 2)
 }
