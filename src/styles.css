@@ -114,14 +114,53 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-size: 14px;
 }
 .desktop-nav a.active { background: var(--ink); color: white; font-weight: 700; }
-.local-badge {
+.desktop-account {
+  min-width: 0;
   justify-self: end;
-  padding: 9px 12px;
-  border: 1px solid #e0e4e1;
-  border-radius: 10px;
-  color: #6d736f;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+.local-badge {
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.account-email {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: .8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-sign-out, .account-sign-out-icon {
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-action);
+  cursor: pointer;
+  transition: border-color var(--motion-fast), transform var(--motion-fast);
+}
+.account-sign-out { padding: 0 12px; white-space: nowrap; }
+.account-sign-out-icon { width: 44px; padding: 0; display: none; place-items: center; }
+.account-sign-out:hover:not(:disabled), .account-sign-out-icon:hover:not(:disabled) {
+  border-color: var(--color-text-tertiary);
+  transform: translateY(-1px);
+}
+.account-sign-out:active:not(:disabled), .account-sign-out-icon:active:not(:disabled) {
+  transform: translateY(0);
+}
+.account-sign-out:disabled, .account-sign-out-icon:disabled {
+  opacity: .58;
+  cursor: not-allowed;
+}
+.mobile-account { display: none; align-items: center; gap: 8px; }
 .app-content { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; outline: none; }
 .mobile-nav { display: none; }
 
@@ -334,8 +373,40 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .import-preview dl div { padding: 15px; border-radius: 12px; background: #f3f5f3; }
 .import-preview dt { color: #666d69; font-size: 11px; }
 .import-preview dd { margin: 5px 0 0; font-weight: 750; }
-.toast { position: fixed; top: 104px; left: 50%; z-index: 30; transform: translateX(-50%); padding: 11px 16px; border-radius: 11px; background: #282123; color: white; font-size: 12px; box-shadow: 0 12px 35px rgba(32,25,27,.18); animation: toast-life 2.6s ease both; }
-.toast.is-error { background: #8d3540; }
+.toast, .shell-saving-status { position: fixed; top: 104px; left: 50%; z-index: 30; transform: translateX(-50%); padding: 11px 16px; border-radius: 11px; background: var(--color-text-action); color: var(--color-surface); font-size: 12px; box-shadow: var(--shadow-float); }
+.toast { animation: toast-life 2.6s ease both; }
+.shell-error-bar {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1200px;
+  min-height: 44px;
+  margin: 0 auto 18px;
+  padding: 0 8px 0 18px;
+  border: 1px solid var(--color-error);
+  border-radius: 16px;
+  background: var(--color-surface);
+  color: var(--color-error);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: .8125rem;
+}
+.shell-error-bar span { min-width: 0; text-wrap: pretty; }
+.shell-error-bar button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-error);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
 
 .onboarding { min-height: 100vh; padding: 42px max(24px, calc((100vw - 1160px) / 2)); position: relative; overflow: hidden; background: #e9ecea; }
 .account-page { min-height: 100vh; padding: 24px; position: relative; overflow: hidden; display: grid; place-items: center; background: var(--color-bg); }
@@ -396,6 +467,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .app-frame { padding: 14px 14px 92px; }
   .topbar { height: 58px; padding: 0 16px; display: flex; justify-content: space-between; }
   .desktop-nav { display: none; }
+  .desktop-account { display: none; }
+  .mobile-account { display: flex; }
+  .account-sign-out-icon { display: grid; }
   .local-badge { padding: 7px 9px; }
   .mobile-nav {
     position: fixed;
