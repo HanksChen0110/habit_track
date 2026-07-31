@@ -124,6 +124,28 @@ describe('AppStore account session reads', () => {
     expect(result.current.store).toEqual(storeA)
   })
 
+  it('replays an authenticated initial read to ready under StrictMode', async () => {
+    const firstRead = deferred<Store | null>()
+    const replayedRead = deferred<Store | null>()
+    authenticate('user-a')
+    repositoryMock.read
+      .mockReturnValueOnce(firstRead.promise)
+      .mockReturnValueOnce(replayedRead.promise)
+
+    const { result } = renderHook(() => useAppStore(), {
+      wrapper,
+      reactStrictMode: true
+    })
+
+    await waitFor(() => expect(repositoryMock.read).toHaveBeenCalledTimes(2))
+    await act(async () => replayedRead.resolve(storeA))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.store).toEqual(storeA)
+
+    await act(async () => firstRead.resolve(storeB))
+    expect(result.current.store).toEqual(storeA)
+  })
+
   it('treats a null read as a completed result for Onboarding', async () => {
     authenticate('new-user')
     repositoryMock.read.mockResolvedValueOnce(null)
@@ -187,6 +209,26 @@ describe('AppStore account session reads', () => {
     expect(rendered.result.current.store).toEqual(storeB)
   })
 
+  it('discards account A error when its read rejects after account B', async () => {
+    const readA = deferred<Store | null>()
+    const readB = deferred<Store | null>()
+    authenticate('user-a')
+    repositoryMock.read
+      .mockReturnValueOnce(readA.promise)
+      .mockReturnValueOnce(readB.promise)
+    const rendered = renderHook(() => useAppStore(), { wrapper })
+
+    authenticate('user-b')
+    rendered.rerender()
+
+    await act(async () => readB.resolve(storeB))
+    await act(async () => readA.reject(new Error('account A failed late')))
+
+    expect(rendered.result.current.status).toBe('ready')
+    expect(rendered.result.current.store).toEqual(storeB)
+    expect(rendered.result.current.error).toBe('')
+  })
+
   it('discards an older reload for the same user by generation', async () => {
     const olderReload = deferred<Store | null>()
     const latestReload = deferred<Store | null>()
@@ -212,6 +254,34 @@ describe('AppStore account session reads', () => {
     await act(async () => olderReload.resolve(storeA))
     expect(await olderResult).toBe(false)
     expect(result.current.store).toEqual(storeB)
+  })
+
+  it('discards an older reload error after the latest reload succeeds', async () => {
+    const olderReload = deferred<Store | null>()
+    const latestReload = deferred<Store | null>()
+    authenticate('user-a')
+    repositoryMock.read
+      .mockResolvedValueOnce(storeA)
+      .mockReturnValueOnce(olderReload.promise)
+      .mockReturnValueOnce(latestReload.promise)
+    const { result } = renderHook(() => useAppStore(), { wrapper })
+    await waitFor(() => expect(result.current.store).toEqual(storeA))
+
+    let olderResult!: Promise<boolean>
+    let latestResult!: Promise<boolean>
+    act(() => {
+      olderResult = result.current.reload()
+      latestResult = result.current.reload()
+    })
+
+    await act(async () => latestReload.resolve(storeB))
+    expect(await latestResult).toBe(true)
+
+    await act(async () => olderReload.reject(new Error('older reload failed late')))
+    expect(await olderResult).toBe(false)
+    expect(result.current.status).toBe('ready')
+    expect(result.current.store).toEqual(storeB)
+    expect(result.current.error).toBe('')
   })
 
   it('keeps JSON import preview behind the app contract', () => {

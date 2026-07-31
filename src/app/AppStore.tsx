@@ -159,19 +159,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (authUserId) {
       void loadForUser(authUserId, sessionGeneration)
-      return
+    } else {
+      setAccountState(idleState(sessionGeneration))
     }
 
-    setAccountState(idleState(sessionGeneration))
-  }, [authUserId, loadForUser, sessionGeneration])
-
-  useEffect(
-    () => () => {
-      authUserIdRef.current = null
+    return () => {
       loadGenerationRef.current += 1
-    },
-    []
-  )
+    }
+  }, [authUserId, loadForUser, sessionGeneration])
 
   const stateMatchesSession =
     accountState.sessionGeneration === sessionGeneration &&
