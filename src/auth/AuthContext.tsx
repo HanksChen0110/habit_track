@@ -112,19 +112,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [error, setError] = useState<AuthFailure | null>(null)
   const clientRef = useRef<SupabaseClient | null>(null)
+  const currentSessionRef = useRef<Session | null>(null)
+  const currentStatusRef = useRef<AuthStatus>('booting')
   const currentUserRef = useRef<AuthUser | null>(null)
   const pendingCredentialRef = useRef<PendingCredentialRequest | null>(null)
+  const credentialQueueRef = useRef<Promise<void> | null>(null)
   const sessionVersionRef = useRef(0)
 
   const applySession = useCallback((session: Session | null) => {
     sessionVersionRef.current += 1
+    currentSessionRef.current = session
     if (session) {
       const nextUser = publicUser(session)
       currentUserRef.current = nextUser
+      currentStatusRef.current = 'authenticated'
       setUser(nextUser)
       setStatus('authenticated')
     } else {
       currentUserRef.current = null
+      currentStatusRef.current = 'signed_out'
       setUser(null)
       setStatus('signed_out')
     }
@@ -133,7 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applyRecoveryFailure = useCallback((cause: unknown) => {
     sessionVersionRef.current += 1
+    currentSessionRef.current = null
     currentUserRef.current = null
+    currentStatusRef.current = 'error'
     setUser(null)
     setError(mapAuthError(cause, true))
     setStatus('error')
@@ -163,6 +171,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           currentUserId !== incomingUserId &&
           currentUserId !== pending?.startUserId
         ) {
+          const authoritativeSession = currentSessionRef.current
+          if (authoritativeSession) {
+            void client.auth
+              .setSession({
+                access_token: authoritativeSession.access_token,
+                refresh_token: authoritativeSession.refresh_token
+              })
+              .then(({ error: restoreError }) => {
+                if (
+                  active &&
+                  restoreError &&
+                  currentUserRef.current?.id === authoritativeSession.user.id
+                ) {
+                  applyRecoveryFailure(restoreError)
+                }
+              })
+              .catch((cause: unknown) => {
+                if (
+                  active &&
+                  currentUserRef.current?.id === authoritativeSession.user.id
+                ) {
+                  applyRecoveryFailure(cause)
+                }
+              })
+          }
           return
         }
 
@@ -198,6 +231,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false
       sessionVersionRef.current += 1
       clientRef.current = null
+      currentSessionRef.current = null
+      pendingCredentialRef.current = null
       unsubscribe?.()
     }
   }, [applyRecoveryFailure, applySession])
@@ -214,8 +249,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const requestVersion = ++sessionVersionRef.current
-      const startStatus = status
-      const startUser = user
+      const startUser =
+        currentStatusRef.current === 'authenticated' ? currentUserRef.current : null
+      const startStatus: AuthStatus = startUser ? 'authenticated' : 'signed_out'
       const pendingRequest: PendingCredentialRequest = {
         email: email.trim().toLowerCase(),
         startUserId: currentUserRef.current?.id ?? null
@@ -224,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const fail = (failure: AuthFailure): AuthResult => {
         if (requestVersion === sessionVersionRef.current) {
           currentUserRef.current = startUser
+          currentStatusRef.current = startStatus
           setUser(startUser)
           setStatus(startStatus)
           setError(failure)
@@ -246,21 +283,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [applySession, status, user]
+    [applySession]
+  )
+
+  const queueCredentialRequest = useCallback(
+    (
+      email: string,
+      request: (client: SupabaseClient) => PromiseLike<CredentialResponse>
+    ) => {
+      const result = credentialQueueRef.current
+        ? credentialQueueRef.current.then(() => runCredentialRequest(email, request))
+        : runCredentialRequest(email, request)
+      const queueTail = result.then(
+        () => undefined,
+        () => undefined
+      )
+      credentialQueueRef.current = queueTail
+      void queueTail.then(() => {
+        if (credentialQueueRef.current === queueTail) credentialQueueRef.current = null
+      })
+      return result
+    },
+    [runCredentialRequest]
   )
 
   const signUp = useCallback(
     (email: string, password: string) =>
-      runCredentialRequest(email, (client) => client.auth.signUp({ email, password })),
-    [runCredentialRequest]
+      queueCredentialRequest(email, (client) => client.auth.signUp({ email, password })),
+    [queueCredentialRequest]
   )
 
   const signIn = useCallback(
     (email: string, password: string) =>
-      runCredentialRequest(email, (client) =>
+      queueCredentialRequest(email, (client) =>
         client.auth.signInWithPassword({ email, password })
       ),
-    [runCredentialRequest]
+    [queueCredentialRequest]
   )
 
   const signOut = useCallback(async (): Promise<AuthResult> => {
