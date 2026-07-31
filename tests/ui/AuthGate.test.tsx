@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Outlet } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -55,6 +55,37 @@ function deferred<T>() {
     resolve = resolvePromise
   })
   return { promise, resolve }
+}
+
+async function verifyInitializationGate(mode: 'empty' | 'demo') {
+  const user = userEvent.setup()
+  const begin = mode === 'empty' ? mocks.appStore.beginEmpty : mocks.appStore.beginDemo
+  const readyLabel = mode === 'empty' ? '开始记录' : '载入示例'
+  const busyLabel = mode === 'empty' ? '开始中…' : '载入中…'
+  mocks.auth.status = 'authenticated'
+  mocks.auth.user = { id: 'user-1', email: 'me@example.com' }
+  mocks.appStore.status = 'ready'
+
+  const rejected = deferred<boolean>()
+  begin.mockReturnValueOnce(rejected.promise)
+  render(<App />)
+
+  await user.click(screen.getByRole('button', { name: readyLabel }))
+  expect(screen.getByRole('button', { name: busyLabel })).toBeDisabled()
+  expect(window.location.hash).not.toContain('/today')
+
+  rejected.resolve(false)
+  await waitFor(() => expect(screen.getByRole('button', { name: readyLabel })).toBeEnabled())
+  expect(window.location.hash).not.toContain('/today')
+  expect(screen.getByRole('heading', { name: '让行动留下清晰的轨迹。' })).toBeInTheDocument()
+
+  const confirmed = deferred<boolean>()
+  begin.mockReturnValueOnce(confirmed.promise)
+  await user.click(screen.getByRole('button', { name: readyLabel }))
+  expect(window.location.hash).not.toContain('/today')
+
+  confirmed.resolve(true)
+  await waitFor(() => expect(window.location.hash).toBe('#/today'))
 }
 
 describe('账号与数据 gate', () => {
@@ -174,19 +205,32 @@ describe('账号与数据 gate', () => {
     expect(mocks.auth.signOut).toHaveBeenCalledTimes(1)
   })
 
-  it('只在账号数据 ready 且未初始化时显示初始化选择，并等待初始化确认', async () => {
+  it('退出账号失败时保留数据错误页并显示安全认证错误', async () => {
     const user = userEvent.setup()
-    const request = deferred<boolean>()
     mocks.auth.status = 'authenticated'
     mocks.auth.user = { id: 'user-1', email: 'me@example.com' }
-    mocks.appStore.status = 'ready'
-    mocks.appStore.beginEmpty.mockReturnValue(request.promise)
+    mocks.appStore.status = 'error'
+    mocks.appStore.error = '暂时无法读取账号数据，请重试。'
+    mocks.auth.signOut.mockResolvedValue({
+      ok: false,
+      error: { category: 'backend_unavailable', message: '账号操作失败，请重试。' }
+    })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '开始记录' }))
-    expect(screen.getByRole('button', { name: '开始中…' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '载入示例' })).toBeDisabled()
-    request.resolve(true)
+    await user.click(screen.getByRole('button', { name: '退出账号' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('账号操作失败，请重试。')
+    expect(screen.getByRole('heading', { name: '暂时无法读取账号数据' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '登录循迹' })).not.toBeInTheDocument()
+    expect(mocks.auth.status).toBe('authenticated')
+  })
+
+  it('开始空白记录只在服务端确认后导航', async () => {
+    await verifyInitializationGate('empty')
+  })
+
+  it('载入示例只在服务端确认后导航', async () => {
+    await verifyInitializationGate('demo')
   })
 
   it('账号 Store 可用后才进入业务路由', () => {

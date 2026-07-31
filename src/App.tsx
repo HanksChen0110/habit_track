@@ -127,16 +127,20 @@ function InitialReadError() {
   const { error, reload } = useAppStore()
   const { signOut } = useAuth()
   const [action, setAction] = useState<'reload' | 'sign-out' | null>(null)
+  const [actionError, setActionError] = useState('')
 
   async function retry() {
     setAction('reload')
+    setActionError('')
     await reload()
     setAction(null)
   }
 
   async function exitAccount() {
     setAction('sign-out')
-    await signOut()
+    setActionError('')
+    const result = await signOut()
+    if (!result.ok) setActionError(result.error.message)
     setAction(null)
   }
 
@@ -150,7 +154,7 @@ function InitialReadError() {
           <h1 id="read-error-title">暂时无法读取账号数据</h1>
           <p>账号仍然保持登录，原数据没有被覆盖。</p>
         </div>
-        <p className="account-error" role="alert">{error}</p>
+        <p className="account-error" role="alert">{actionError || error}</p>
         <div className="account-error-actions">
           <button
             className="account-primary-button"
