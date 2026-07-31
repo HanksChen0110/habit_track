@@ -196,6 +196,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const confirmed = accountStateRef.current
     if (
       !userId ||
+      activeWriteRef.current !== null ||
       confirmed.userId !== userId ||
       confirmed.sessionGeneration !== requestedSessionGeneration
     ) {

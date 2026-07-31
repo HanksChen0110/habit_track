@@ -165,6 +165,61 @@ describe('AppStore server-confirmed writes', () => {
     expect(result.current.error).toBe('')
   })
 
+  it('rejects reload while a write is pending and releases the gate after confirmation', async () => {
+    const pendingWrite = deferred<Store>()
+    const followupWrite = deferred<Store>()
+    const followupCandidate: Store = {
+      ...confirmedA,
+      habits: [{ ...confirmedA.habits[0], archivedOn: '2026-08-01' }]
+    }
+    repositoryMock.commit
+      .mockReturnValueOnce(pendingWrite.promise)
+      .mockReturnValueOnce(followupWrite.promise)
+    const { result } = await renderAuthenticated()
+
+    let pendingResult!: Promise<boolean>
+    act(() => {
+      pendingResult = result.current.commit(() => candidateA)
+    })
+    expect(result.current.status).toBe('saving')
+    expect(result.current.store).toEqual(storeA)
+
+    repositoryMock.read.mockResolvedValueOnce(storeB)
+    let reloadResult = true
+    await act(async () => {
+      reloadResult = await result.current.reload()
+    })
+
+    expect(reloadResult).toBe(false)
+    expect(repositoryMock.read).toHaveBeenCalledTimes(1)
+    expect(result.current.status).toBe('saving')
+    expect(result.current.store).toEqual(storeA)
+    expect(result.current.notice).toBe('')
+    expect(result.current.error).toBe('')
+
+    await act(async () => pendingWrite.resolve(confirmedA))
+    await expect(pendingResult).resolves.toBe(true)
+    expect(result.current.status).toBe('ready')
+    expect(result.current.store).toEqual(confirmedA)
+
+    let followupResult!: Promise<boolean>
+    act(() => {
+      followupResult = result.current.commit(() => followupCandidate)
+    })
+    expect(repositoryMock.commit).toHaveBeenCalledTimes(2)
+    expect(repositoryMock.commit).toHaveBeenNthCalledWith(
+      2,
+      confirmedA,
+      followupCandidate
+    )
+    expect(result.current.status).toBe('saving')
+
+    await act(async () => followupWrite.resolve(followupCandidate))
+    await expect(followupResult).resolves.toBe(true)
+    expect(result.current.status).toBe('ready')
+    expect(result.current.store).toEqual(followupCandidate)
+  })
+
   it('keeps the last confirmed Store and a persistent error until clear or a later success', async () => {
     repositoryMock.commit.mockRejectedValueOnce(new Error('private database detail'))
     const { result } = await renderAuthenticated()
@@ -307,32 +362,6 @@ describe('AppStore server-confirmed writes', () => {
     expect(result.current.notice).toBe('')
     expect(result.current.error).toBe('暂时无法重新读取账号数据，请重试。')
     expect(result.current.error).not.toContain('readback')
-  })
-
-  it('discards a late write when a newer operation wins for the same account', async () => {
-    const write = deferred<Store>()
-    repositoryMock.commit.mockReturnValueOnce(write.promise)
-    const { result } = await renderAuthenticated()
-
-    let writeResult!: Promise<boolean>
-    act(() => {
-      writeResult = result.current.commit(() => candidateA)
-    })
-
-    repositoryMock.read.mockResolvedValueOnce(storeB)
-    let reloadResult = false
-    await act(async () => {
-      reloadResult = await result.current.reload()
-    })
-    expect(reloadResult).toBe(true)
-    expect(result.current.store).toEqual(storeB)
-
-    await act(async () => write.resolve(confirmedA))
-
-    await expect(writeResult).resolves.toBe(false)
-    expect(result.current.store).toEqual(storeB)
-    expect(result.current.notice).toBe('已重新读取账号数据')
-    expect(result.current.error).toBe('')
   })
 
   it('isolates late account A writes without unlocking account B active writes', async () => {
