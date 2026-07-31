@@ -351,6 +351,72 @@ describe('AuthContext', () => {
     expect(result.current.user).toBeNull()
   })
 
+  it.each([
+    [
+      'returns an error',
+      async () => ({
+        error: {
+          name: 'AuthApiError',
+          status: 500,
+          message: 'token=restoration-secret; auth.sessions rejected sign-out'
+        }
+      })
+    ],
+    [
+      'rejects',
+      () =>
+        Promise.reject({
+          name: 'AuthRetryableFetchError',
+          status: 0,
+          message: 'access_token=restoration-secret; Session restore rejected'
+        })
+    ]
+  ] as const)(
+    'reports a safe failure when restorative sign-out %s',
+    async (_mode, restoreSignOut) => {
+      const { result } = await renderSignedOut()
+      const signIn = deferred<{
+        data: { user: User; session: Session }
+        error: null
+      }>()
+      const signOut = deferred<{ error: null }>()
+      const sessionA = createSession('user-a', 'a@example.com')
+      authMock.signInWithPassword.mockReturnValueOnce(signIn.promise)
+      authMock.signOut
+        .mockReturnValueOnce(signOut.promise)
+        .mockImplementationOnce(restoreSignOut)
+
+      let signInPromise: ReturnType<typeof result.current.signIn>
+      let signOutPromise: ReturnType<typeof result.current.signOut>
+      act(() => {
+        signInPromise = result.current.signIn('a@example.com', 'not-logged')
+        signOutPromise = result.current.signOut()
+        emitAuth('SIGNED_OUT', null)
+        emitAuth('SIGNED_IN', sessionA)
+      })
+
+      let outcome: Awaited<ReturnType<typeof result.current.signOut>> | undefined
+      await act(async () => {
+        signIn.resolve({ data: { user: sessionA.user, session: sessionA }, error: null })
+        signOut.resolve({ error: null })
+        await signInPromise
+        outcome = await signOutPromise
+      })
+
+      const expectedFailure = {
+        category: 'backend_unavailable',
+        message: '本地后端暂时不可用，请确认本地服务已启动。'
+      }
+      expect(outcome).toEqual({ ok: false, error: expectedFailure })
+      expect(result.current.status).toBe('error')
+      expect(result.current.user).toBeNull()
+      expect(result.current.error).toEqual(expectedFailure)
+      expect(JSON.stringify(outcome)).not.toContain('restoration-secret')
+      expect(JSON.stringify(outcome)).not.toContain('auth.sessions')
+      expect(JSON.stringify(outcome)).not.toContain('Session')
+    }
+  )
+
   it('keeps the newest account when initial recovery returns an older session late', async () => {
     const recovery = deferred<{
       data: { session: Session }

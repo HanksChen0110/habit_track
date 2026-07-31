@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const currentUserRef = useRef<AuthUser | null>(null)
   const pendingCredentialRef = useRef<PendingCredentialRequest | null>(null)
   const restorationRef = useRef<SessionRestoration | null>(null)
-  const signedOutRestorationRef = useRef<Promise<void> | null>(null)
+  const signedOutRestorationRef = useRef<Promise<AuthFailure | null> | null>(null)
   const credentialQueueRef = useRef<Promise<void> | null>(null)
   const authGenerationRef = useRef(0)
   const authoritativeSignedOutRef = useRef(false)
@@ -176,15 +176,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const restoreSignedOut = client.auth
               .signOut()
               .then(({ error: restoreError }) => {
-                if (active && restoreError) applyRecoveryFailure(restoreError)
+                if (!restoreError) return null
+                if (active) applyRecoveryFailure(restoreError)
+                return mapAuthError(restoreError, true)
               })
               .catch((cause: unknown) => {
                 if (active) applyRecoveryFailure(cause)
-              })
-              .finally(() => {
-                if (signedOutRestorationRef.current === restoreSignedOut) {
-                  signedOutRestorationRef.current = null
-                }
+                return mapAuthError(cause, true)
               })
             signedOutRestorationRef.current = restoreSignedOut
           }
@@ -404,7 +402,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (requestVersion === sessionVersionRef.current) applySession(null)
       if (priorCredentials) await priorCredentials
       const restoration = signedOutRestorationRef.current
-      if (restoration) await restoration
+      if (restoration) {
+        const restorationFailure = await restoration
+        if (signedOutRestorationRef.current === restoration) {
+          signedOutRestorationRef.current = null
+        }
+        if (restorationFailure) {
+          authoritativeSignedOutRef.current = false
+          return { ok: false, error: restorationFailure }
+        }
+      }
       authoritativeSignedOutRef.current = false
       return { ok: true }
     } catch (cause) {
