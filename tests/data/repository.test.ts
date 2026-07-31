@@ -76,6 +76,8 @@ describe('Store 编解码边界', () => {
     ['missing completion habit', { ...validStore, completions: [{ ...validStore.completions[0], habitId: 'missing' }] }, '完成记录引用不存在的习惯'],
     ['duplicate completion', { ...validStore, completions: [validStore.completions[0], { ...validStore.completions[0] }] }, '完成记录重复'],
     ['invalid completion date', { ...validStore, completions: [{ ...validStore.completions[0], date: '2026-07-25' }] }, '完成记录日期无效'],
+    ['completion before habit creation', { ...validStore, completions: [{ ...validStore.completions[0], date: '2026-07-19' }] }, '完成记录日期无效'],
+    ['completion after habit archive', { ...validStore, completions: [{ ...validStore.completions[1], date: '2026-07-24' }] }, '完成记录日期无效'],
     ['invalid completion count', { ...validStore, completions: [{ ...validStore.completions[0], count: 0 }] }, '完成记录次数无效']
   ])('rejects %s without touching the legacy localStorage key', (_label, store, error) => {
     localStorage.setItem(legacyKey, legacySnapshot)
