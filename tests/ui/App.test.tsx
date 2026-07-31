@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -57,10 +57,12 @@ function cloneStore(store: Store | null): Store | null {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((next) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((next, fail) => {
     resolve = next
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 async function renderAccount(store: Store | null) {
@@ -361,7 +363,8 @@ describe('循迹交互原型', () => {
     }
     window.location.hash = '#/manage'
     await renderAccount(accountStore)
-    repositoryMock.replace.mockRejectedValueOnce(new Error('database unavailable'))
+    const replacement = deferred<Store>()
+    repositoryMock.replace.mockReturnValueOnce(replacement.promise)
 
     const backup: Store = {
       version: 1,
@@ -380,11 +383,18 @@ describe('循迹交互原型', () => {
       screen.getByLabelText('选择 JSON 备份'),
       new File([JSON.stringify(backup)], 'candidate.json', { type: 'application/json' })
     )
-    await user.click(
-      within(screen.getByRole('dialog', { name: '确认替换数据' })).getByRole('button', {
-        name: '完整替换'
-      })
-    )
+    const importDialog = screen.getByRole('dialog', { name: '确认替换数据' })
+    fireEvent.click(within(importDialog).getByRole('button', { name: '完整替换' }))
+    await act(async () => undefined)
+
+    expect(within(importDialog).getByRole('button', { name: '替换中…' })).toBeDisabled()
+    expect(screen.getByText('已确认习惯')).toBeInTheDocument()
+    expect(screen.queryByText('未确认候选习惯')).not.toBeInTheDocument()
+
+    await act(async () => {
+      replacement.reject(new Error('database unavailable'))
+      await replacement.promise.catch(() => undefined)
+    })
 
     expect(await screen.findByRole('alert')).toHaveTextContent('刚才的修改未保存，请重新操作。')
     expect(screen.getByText('已确认习惯')).toBeInTheDocument()
@@ -409,6 +419,7 @@ describe('循迹交互原型', () => {
       completions: []
     }
     const rendered = await renderAccount(accountStore)
+    expect(repositoryMock.read).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getAllByRole('button', { name: '退出账号' })[0])
     rendered.rerender(<App />)
@@ -422,9 +433,20 @@ describe('循迹交互原型', () => {
       status: 'authenticated',
       user: { id: 'user-1', email: 'me@example.com' }
     }
+    const secondRead = deferred<Store | null>()
+    repositoryMock.read.mockReturnValueOnce(secondRead.promise)
     rendered.rerender(<App />)
 
-    expect(await screen.findByText('退出后仍保留')).toBeInTheDocument()
+    expect(repositoryMock.read).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('heading', { name: '正在读取账号数据……' })).toBeInTheDocument()
+    expect(screen.queryByText('退出后仍保留')).not.toBeInTheDocument()
+
+    await act(async () => {
+      secondRead.resolve(structuredClone(accountStore))
+      await secondRead.promise
+    })
+
+    expect(screen.getByText('退出后仍保留')).toBeInTheDocument()
     expect(repositoryMock.serverStore).toEqual(accountStore)
   })
 })
