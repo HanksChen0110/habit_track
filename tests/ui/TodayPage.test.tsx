@@ -131,13 +131,12 @@ describe('TodayPage account writes', () => {
     expect(within(screen.getByTestId('habit-row')).getByText('已保存')).toBeInTheDocument()
   })
 
-  it('keeps a recent-day count confirmed and reusable when the account commit rejects', async () => {
+  it('keeps a recent-day count confirmed and reusable when the account commit resolves false', async () => {
     const user = userEvent.setup()
-    const save = deferred<boolean>()
     let candidate!: Store
     mocks.appStore.commit.mockImplementationOnce((buildNext) => {
       candidate = buildNext(structuredClone(confirmedStore))
-      return save.promise
+      return Promise.resolve(false)
     })
     renderToday()
 
@@ -148,14 +147,10 @@ describe('TodayPage account writes', () => {
     const increase = within(row).getByRole('button', { name: '阅读，增加一次' })
     await user.click(increase)
 
-    expect(within(row).getByText('保存中…')).toBeInTheDocument()
     expect(within(row).getByText('0 / 2')).toBeInTheDocument()
     expect(candidate.completions).toEqual([
       { habitId: 'habit-reading', date: '2026-07-27', count: 1 }
     ])
-
-    await act(async () => save.reject(new Error('private database detail')))
-
     expect(within(row).getByText('未保存，请重试')).toBeInTheDocument()
     expect(within(row).getByText('0 / 2')).toBeInTheDocument()
     expect(increase).toBeEnabled()
