@@ -179,4 +179,57 @@ describe('AppShell', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('暂时无法重新读取账号数据，请重试。')
   })
+
+  it('reveals an underlying write error after dismissing a covering sign-out failure', async () => {
+    const user = userEvent.setup()
+    mocks.appStore.error = '刚才的修改未保存，请重新操作。'
+    mocks.auth.signOut.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        category: 'backend_unavailable',
+        message: '本地后端暂时不可用，请确认本地服务已启动。'
+      }
+    })
+    renderShell()
+
+    await user.click(
+      within(screen.getByRole('group', { name: '桌面账号' })).getByRole('button', {
+        name: '退出账号'
+      })
+    )
+    const signOutAlert = await screen.findByRole('alert')
+    expect(signOutAlert).toHaveTextContent('本地后端暂时不可用，请确认本地服务已启动。')
+
+    await user.click(within(signOutAlert).getByRole('button', { name: '关闭退出失败提示' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('刚才的修改未保存，请重新操作。')
+    expect(mocks.appStore.clearMessages).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: '关闭未保存提示' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.appStore.clearMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it('replaces a cleared write alert with the AppStore success notice', () => {
+    mocks.appStore.error = '刚才的修改未保存，请重新操作。'
+    const rendered = renderShell()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('刚才的修改未保存，请重新操作。')
+
+    mocks.appStore.error = ''
+    mocks.appStore.notice = '已保存今天的记录'
+    rendered.rerender(
+      <MemoryRouter initialEntries={['/today']}>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="*" element={<p>页面内容</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    const toast = screen.getByRole('status', { name: '保存结果' })
+    expect(toast).toHaveAttribute('aria-live', 'polite')
+    expect(toast).toHaveTextContent('已保存今天的记录')
+  })
 })

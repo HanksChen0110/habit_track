@@ -43,9 +43,12 @@ export function AppShell() {
   }
 
   function dismissError() {
-    setSignOutError('')
-    if (error) {
-      setDismissedStoreError(error)
+    if (signOutError) {
+      setSignOutError('')
+      return
+    }
+    if (visibleStoreError) {
+      setDismissedStoreError(visibleStoreError)
       clearMessages()
     }
   }
