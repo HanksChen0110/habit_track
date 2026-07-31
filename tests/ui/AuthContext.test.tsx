@@ -315,6 +315,42 @@ describe('AuthContext', () => {
     expect(result.current.user).toBeNull()
   })
 
+  it('keeps signed out when an earlier credential emits SIGNED_IN after exit', async () => {
+    const { result } = await renderSignedOut()
+    const signIn = deferred<{
+      data: { user: User; session: Session }
+      error: null
+    }>()
+    const signOut = deferred<{ error: null }>()
+    const sessionA = createSession('user-a', 'a@example.com')
+    authMock.signInWithPassword.mockReturnValueOnce(signIn.promise)
+    authMock.signOut
+      .mockReturnValueOnce(signOut.promise)
+      .mockImplementationOnce(async () => {
+        emitAuth('SIGNED_OUT', null)
+        return { error: null }
+      })
+
+    let signInPromise: ReturnType<typeof result.current.signIn>
+    let signOutPromise: ReturnType<typeof result.current.signOut>
+    act(() => {
+      signInPromise = result.current.signIn('a@example.com', 'not-logged')
+      signOutPromise = result.current.signOut()
+      emitAuth('SIGNED_OUT', null)
+      emitAuth('SIGNED_IN', sessionA)
+    })
+
+    await act(async () => {
+      signIn.resolve({ data: { user: sessionA.user, session: sessionA }, error: null })
+      signOut.resolve({ error: null })
+      await Promise.all([signInPromise, signOutPromise])
+    })
+
+    expect(authMock.currentSession).toBeNull()
+    expect(result.current.status).toBe('signed_out')
+    expect(result.current.user).toBeNull()
+  })
+
   it('keeps the newest account when initial recovery returns an older session late', async () => {
     const recovery = deferred<{
       data: { session: Session }
@@ -402,32 +438,61 @@ describe('AuthContext', () => {
     expect(result.current.user).toEqual({ id: 'user-b', email: 'b@example.com' })
   })
 
-  it('restores the authoritative session before a refresh can revive a rejected account', async () => {
+  it('blocks stale refreshes and queued credentials until session restoration finishes', async () => {
     const { result } = await renderSignedOut()
-    const signIn = deferred<{
+    const signInA = deferred<{
       data: { user: User; session: Session }
       error: null
     }>()
-    authMock.signInWithPassword.mockReturnValueOnce(signIn.promise)
+    const signInC = deferred<{
+      data: { user: User; session: Session }
+      error: null
+    }>()
+    const restoration = deferred<{
+      data: { user: User; session: Session }
+      error: null
+    }>()
+    authMock.signInWithPassword
+      .mockReturnValueOnce(signInA.promise)
+      .mockReturnValueOnce(signInC.promise)
+    authMock.setSession.mockReturnValueOnce(restoration.promise)
     const sessionA = createSession('user-a', 'a@example.com')
     const sessionB = createSession('user-b', 'b@example.com')
+    const sessionC = createSession('user-c', 'c@example.com')
 
-    let signInPromise: ReturnType<typeof result.current.signIn>
+    let firstRequest: ReturnType<typeof result.current.signIn>
+    let secondRequest: ReturnType<typeof result.current.signIn>
     act(() => {
-      signInPromise = result.current.signIn('a@example.com', 'not-logged')
+      firstRequest = result.current.signIn('a@example.com', 'first-password')
+      secondRequest = result.current.signIn('c@example.com', 'second-password')
       emitAuth('SIGNED_IN', sessionB)
       emitAuth('SIGNED_IN', sessionA)
-      emitAuth('TOKEN_REFRESHED', authMock.currentSession)
+      emitAuth('TOKEN_REFRESHED', sessionA)
     })
 
     await act(async () => {
-      signIn.resolve({ data: { user: sessionA.user, session: sessionA }, error: null })
-      await signInPromise
+      signInA.resolve({ data: { user: sessionA.user, session: sessionA }, error: null })
+      await Promise.resolve()
     })
 
-    expect(authMock.currentSession?.user.id).toBe('user-b')
     expect(result.current.status).toBe('authenticated')
     expect(result.current.user).toEqual({ id: 'user-b', email: 'b@example.com' })
+    expect(authMock.signInWithPassword).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      emitAuth('SIGNED_IN', sessionB)
+      restoration.resolve({ data: { user: sessionB.user, session: sessionB }, error: null })
+      await firstRequest
+    })
+    await waitFor(() => expect(authMock.signInWithPassword).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      emitAuth('SIGNED_IN', sessionC)
+      signInC.resolve({ data: { user: sessionC.user, session: sessionC }, error: null })
+      await secondRequest
+    })
+
+    expect(result.current.user).toEqual({ id: 'user-c', email: 'c@example.com' })
   })
 
   it('serializes credential requests so each request keeps its own session boundary', async () => {

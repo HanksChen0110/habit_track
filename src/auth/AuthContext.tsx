@@ -57,6 +57,11 @@ interface PendingCredentialRequest {
   startUserId: string | null
 }
 
+interface SessionRestoration {
+  userId: string
+  promise: Promise<void>
+}
+
 const BACKEND_UNAVAILABLE: AuthFailure = {
   category: 'backend_unavailable',
   message: '本地后端暂时不可用，请确认本地服务已启动。'
@@ -116,7 +121,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const currentStatusRef = useRef<AuthStatus>('booting')
   const currentUserRef = useRef<AuthUser | null>(null)
   const pendingCredentialRef = useRef<PendingCredentialRequest | null>(null)
+  const restorationRef = useRef<SessionRestoration | null>(null)
+  const signedOutRestorationRef = useRef<Promise<void> | null>(null)
   const credentialQueueRef = useRef<Promise<void> | null>(null)
+  const authGenerationRef = useRef(0)
+  const authoritativeSignedOutRef = useRef(false)
   const sessionVersionRef = useRef(0)
 
   const applySession = useCallback((session: Session | null) => {
@@ -157,9 +166,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clientRef.current = client
       const subscription = client.auth.onAuthStateChange((event, session) => {
         if (!active) return
+        if (!session) {
+          applySession(null)
+          return
+        }
+
+        if (authoritativeSignedOutRef.current) {
+          if (!signedOutRestorationRef.current) {
+            const restoreSignedOut = client.auth
+              .signOut()
+              .then(({ error: restoreError }) => {
+                if (active && restoreError) applyRecoveryFailure(restoreError)
+              })
+              .catch((cause: unknown) => {
+                if (active) applyRecoveryFailure(cause)
+              })
+              .finally(() => {
+                if (signedOutRestorationRef.current === restoreSignedOut) {
+                  signedOutRestorationRef.current = null
+                }
+              })
+            signedOutRestorationRef.current = restoreSignedOut
+          }
+          return
+        }
+
+        const restoration = restorationRef.current
+        const incomingUserId = session?.user.id
+        if (restoration && incomingUserId && incomingUserId !== restoration.userId) {
+          return
+        }
+
         const pending = pendingCredentialRef.current
         const currentUserId = currentUserRef.current?.id
-        const incomingUserId = session?.user.id
         const isRequestedAccount =
           event === 'SIGNED_IN' &&
           session?.user.email?.trim().toLowerCase() === pending?.email
@@ -172,13 +211,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           currentUserId !== pending?.startUserId
         ) {
           const authoritativeSession = currentSessionRef.current
-          if (authoritativeSession) {
-            void client.auth
-              .setSession({
-                access_token: authoritativeSession.access_token,
-                refresh_token: authoritativeSession.refresh_token
-              })
-              .then(({ error: restoreError }) => {
+          if (authoritativeSession && !restorationRef.current) {
+            const restorationState: SessionRestoration = {
+              userId: authoritativeSession.user.id,
+              promise: Promise.resolve()
+            }
+            restorationRef.current = restorationState
+            restorationState.promise = (async () => {
+              try {
+                const { error: restoreError } = await client.auth.setSession({
+                  access_token: authoritativeSession.access_token,
+                  refresh_token: authoritativeSession.refresh_token
+                })
                 if (
                   active &&
                   restoreError &&
@@ -186,15 +230,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 ) {
                   applyRecoveryFailure(restoreError)
                 }
-              })
-              .catch((cause: unknown) => {
+              } catch (cause) {
                 if (
                   active &&
                   currentUserRef.current?.id === authoritativeSession.user.id
                 ) {
                   applyRecoveryFailure(cause)
                 }
-              })
+              } finally {
+                if (restorationRef.current === restorationState) {
+                  restorationRef.current = null
+                }
+              }
+            })()
           }
           return
         }
@@ -233,6 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clientRef.current = null
       currentSessionRef.current = null
       pendingCredentialRef.current = null
+      restorationRef.current = null
+      signedOutRestorationRef.current = null
       unsubscribe?.()
     }
   }, [applyRecoveryFailure, applySession])
@@ -248,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, error: BACKEND_UNAVAILABLE }
       }
 
+      authoritativeSignedOutRef.current = false
       const requestVersion = ++sessionVersionRef.current
       const startUser =
         currentStatusRef.current === 'authenticated' ? currentUserRef.current : null
@@ -278,6 +329,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (cause) {
         return fail(mapAuthError(cause))
       } finally {
+        const restoration = restorationRef.current
+        if (restoration) await restoration.promise
         if (pendingCredentialRef.current === pendingRequest) {
           pendingCredentialRef.current = null
         }
@@ -291,9 +344,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       request: (client: SupabaseClient) => PromiseLike<CredentialResponse>
     ) => {
+      const requestGeneration = authGenerationRef.current
+      const execute = () =>
+        requestGeneration === authGenerationRef.current
+          ? runCredentialRequest(email, request)
+          : Promise.resolve<AuthResult>({ ok: false, error: UNKNOWN_AUTH_FAILURE })
       const result = credentialQueueRef.current
-        ? credentialQueueRef.current.then(() => runCredentialRequest(email, request))
-        : runCredentialRequest(email, request)
+        ? credentialQueueRef.current.then(execute)
+        : execute()
       const queueTail = result.then(
         () => undefined,
         () => undefined
@@ -328,19 +386,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: BACKEND_UNAVAILABLE }
     }
 
+    authGenerationRef.current += 1
+    authoritativeSignedOutRef.current = true
+    const priorCredentials = credentialQueueRef.current
     const requestVersion = ++sessionVersionRef.current
     try {
       const { error: signOutError } = await client.auth.signOut()
       if (signOutError) {
         const failure = mapAuthError(signOutError)
+        if (currentStatusRef.current !== 'signed_out') {
+          authoritativeSignedOutRef.current = false
+        }
         if (requestVersion === sessionVersionRef.current) setError(failure)
         return { ok: false, error: failure }
       }
 
       if (requestVersion === sessionVersionRef.current) applySession(null)
+      if (priorCredentials) await priorCredentials
+      const restoration = signedOutRestorationRef.current
+      if (restoration) await restoration
+      authoritativeSignedOutRef.current = false
       return { ok: true }
     } catch (cause) {
       const failure = mapAuthError(cause)
+      if (currentStatusRef.current !== 'signed_out') {
+        authoritativeSignedOutRef.current = false
+      }
       if (requestVersion === sessionVersionRef.current) setError(failure)
       return { ok: false, error: failure }
     }
