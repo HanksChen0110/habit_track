@@ -205,6 +205,31 @@ describe('账号与数据 gate', () => {
     expect(mocks.auth.signOut).toHaveBeenCalledTimes(1)
   })
 
+  it('把账号 Store 完整性失败路由到恢复页而不是普通读取错误面板', () => {
+    mocks.auth.status = 'authenticated'
+    mocks.auth.user = { id: 'user-1', email: 'me@example.com' }
+    mocks.appStore.status = 'integrity-error'
+    mocks.appStore.error = '账号数据完整性校验失败，需要从完整备份恢复。'
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: '账号数据需要恢复' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重新读取' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '让行动留下清晰的轨迹。' })).not.toBeInTheDocument()
+  })
+
+  it('在完整性恢复写入未决时保持恢复页挂载', () => {
+    mocks.auth.status = 'authenticated'
+    mocks.auth.user = { id: 'user-1', email: 'me@example.com' }
+    mocks.appStore.status = 'recovering'
+    mocks.appStore.error = ''
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: '账号数据需要恢复' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '让行动留下清晰的轨迹。' })).not.toBeInTheDocument()
+  })
+
   it('退出账号失败时保留数据错误页并显示安全认证错误', async () => {
     const user = userEvent.setup()
     mocks.auth.status = 'authenticated'

@@ -7,6 +7,7 @@ import {
   type ImportPreview
 } from '../../src/app/AppStore'
 import type { AuthStatus, AuthUser } from '../../src/auth/AuthContext'
+import { StoreIntegrityError } from '../../src/data/repository'
 import type { Store } from '../../src/domain/types'
 
 const authMock = vi.hoisted(() => ({
@@ -170,6 +171,39 @@ describe('AppStore account session reads', () => {
     expect(result.current.error).toBe('暂时无法读取账号数据，请重试。')
     expect(result.current.error).not.toContain('habits')
     expect(result.current.error).not.toContain('private')
+  })
+
+  it('classifies invalid account Store data separately from a backend read failure', async () => {
+    authenticate('user-a')
+    repositoryMock.read.mockRejectedValueOnce(
+      new StoreIntegrityError('完成记录引用不存在的习惯：private-habit')
+    )
+
+    const { result } = renderHook(() => useAppStore(), { wrapper })
+
+    await waitFor(() => expect(result.current.status).toBe('integrity-error'))
+    expect(result.current.store).toBeNull()
+    expect(result.current.error).toContain('完整性')
+    expect(result.current.error).not.toContain('private-habit')
+  })
+
+  it('changes a generic initial read failure to integrity recovery when retry finds invalid Store data', async () => {
+    authenticate('user-a')
+    repositoryMock.read
+      .mockRejectedValueOnce(new Error('backend unavailable'))
+      .mockRejectedValueOnce(new StoreIntegrityError('习惯数据无效'))
+    const { result } = renderHook(() => useAppStore(), { wrapper })
+    await waitFor(() => expect(result.current.status).toBe('error'))
+
+    let reloaded = true
+    await act(async () => {
+      reloaded = await result.current.reload()
+    })
+
+    expect(reloaded).toBe(false)
+    expect(result.current.status).toBe('integrity-error')
+    expect(result.current.store).toBeNull()
+    expect(result.current.error).toContain('完整性')
   })
 
   it('hides the previous Store synchronously when the session signs out', async () => {

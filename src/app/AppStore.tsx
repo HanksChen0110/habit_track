@@ -13,6 +13,7 @@ import { createDemoStore } from '../data/demo'
 import {
   previewImport as previewStoreImport,
   serialize,
+  StoreIntegrityError,
   type ImportPreview
 } from '../data/repository'
 import { SupabaseStoreRepository } from '../data/supabaseRepository'
@@ -22,7 +23,14 @@ import type { Store } from '../domain/types'
 
 export type { ImportPreview } from '../data/repository'
 
-export type AppStoreStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'error'
+export type AppStoreStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'saving'
+  | 'recovering'
+  | 'error'
+  | 'integrity-error'
 
 interface AppStoreValue {
   status: AppStoreStatus
@@ -53,6 +61,7 @@ interface AccountStoreState {
 }
 
 const READ_FAILURE = '暂时无法读取账号数据，请重试。'
+const INTEGRITY_FAILURE = '账号数据完整性校验失败，需要从完整备份恢复。'
 const RELOAD_FAILURE = '暂时无法重新读取账号数据，请重试。'
 const WRITE_FAILURE = '刚才的修改未保存，请重新操作。'
 
@@ -146,7 +155,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           error: ''
         })
         return true
-      } catch {
+      } catch (cause) {
         if (
           authUserIdRef.current !== userId ||
           sessionGenerationRef.current !== requestedSessionGeneration ||
@@ -158,10 +167,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         publishAccountState({
           sessionGeneration: requestedSessionGeneration,
           userId,
-          status: 'error',
+          status: cause instanceof StoreIntegrityError ? 'integrity-error' : 'error',
           store: null,
           notice: '',
-          error: READ_FAILURE
+          error: cause instanceof StoreIntegrityError ? INTEGRITY_FAILURE : READ_FAILURE
         })
         return false
       }
@@ -231,7 +240,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         error: ''
       })
       return true
-    } catch {
+    } catch (cause) {
       if (
         authUserIdRef.current !== userId ||
         sessionGenerationRef.current !== requestedSessionGeneration ||
@@ -241,13 +250,23 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return false
       }
 
+      const isInitialIntegrityFailure =
+        confirmed.store === null && cause instanceof StoreIntegrityError
       publishAccountState({
         sessionGeneration: requestedSessionGeneration,
         userId,
-        status: confirmed.store === null ? 'error' : 'ready',
+        status: isInitialIntegrityFailure
+          ? 'integrity-error'
+          : confirmed.store === null
+            ? 'error'
+            : 'ready',
         store: confirmed.store,
         notice: '',
-        error: confirmed.store === null ? READ_FAILURE : RELOAD_FAILURE
+        error: isInitialIntegrityFailure
+          ? INTEGRITY_FAILURE
+          : confirmed.store === null
+            ? READ_FAILURE
+            : RELOAD_FAILURE
       })
       return false
     }
@@ -256,7 +275,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const runWrite = useCallback(
     (
       write: (confirmedStore: Store | null) => Promise<Store>,
-      successMessage: string
+      successMessage: string,
+      allowIntegrityRecovery = false
     ): Promise<boolean> => {
       const userId = authUserIdRef.current
       const requestedSessionGeneration = sessionGenerationRef.current
@@ -266,7 +286,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         activeWriteRef.current !== null ||
         confirmed.userId !== userId ||
         confirmed.sessionGeneration !== requestedSessionGeneration ||
-        confirmed.status !== 'ready'
+        (confirmed.status !== 'ready' &&
+          !(
+            allowIntegrityRecovery &&
+            confirmed.status === 'integrity-error' &&
+            confirmed.store === null
+          ))
       ) {
         return Promise.resolve(false)
       }
@@ -274,7 +299,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const operationGeneration = ++operationGenerationRef.current
       activeWriteRef.current = operationGeneration
       loadGenerationRef.current += 1
-      publishAccountState({ ...confirmed, status: 'saving', notice: '' })
+      publishAccountState({
+        ...confirmed,
+        status: confirmed.status === 'integrity-error' ? 'recovering' : 'saving',
+        notice: ''
+      })
 
       return (async () => {
         try {
@@ -309,7 +338,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
           publishAccountState({
             ...confirmed,
-            status: 'ready',
             notice: '',
             error: WRITE_FAILURE
           })
@@ -376,7 +404,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   )
   const confirmImport = useCallback(
     (preview: ImportPreview) =>
-      runWrite(() => repository.replace(preview.store), '数据已完整替换'),
+      runWrite(() => repository.replace(preview.store), '数据已完整替换', true),
     [repository, runWrite]
   )
 

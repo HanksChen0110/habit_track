@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
-import { useAppStore } from '../app/AppStore'
+import { useAppStore, type ImportPreview } from '../app/AppStore'
 import { Brand } from '../components/Brand'
 
 export function RecoveryPage() {
@@ -8,27 +8,40 @@ export function RecoveryPage() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState('')
   const [isRecovering, setIsRecovering] = useState(false)
+  const [candidate, setCandidate] = useState<ImportPreview | null>(null)
 
-  async function handleFile(file: File | undefined) {
-    if (!file || isRecovering) return
+  async function runRecovery(loadPreview: () => ImportPreview | Promise<ImportPreview>) {
+    if (isRecovering) return
 
     setIsRecovering(true)
+    setMessage('')
     try {
-      setMessage('')
-      const text = await file.text()
-      const preview = previewImport(text)
+      let preview: ImportPreview
       try {
-        if (!(await confirmImport(preview))) {
+        preview = await loadPreview()
+      } catch (cause) {
+        setMessage(cause instanceof Error ? cause.message : '无法读取这个备份文件。')
+        return
+      }
+      setCandidate(preview)
+      try {
+        if (await confirmImport(preview)) {
+          setCandidate(null)
+        } else {
           setMessage('恢复未完成，请重试。')
         }
       } catch {
         setMessage('恢复未完成，请重试。')
       }
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '无法读取这个备份文件。')
     } finally {
       setIsRecovering(false)
     }
+  }
+
+  function handleFile(file: File | undefined) {
+    if (!file || isRecovering) return
+    setCandidate(null)
+    void runRecovery(async () => previewImport(await file.text()))
   }
 
   return (
@@ -50,12 +63,44 @@ export function RecoveryPage() {
           accept="application/json,.json"
           aria-label="选择 JSON 备份"
           disabled={isRecovering}
-          onChange={(event) => void handleFile(event.target.files?.[0])}
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            handleFile(file)
+          }}
         />
-        <button className="primary-button" type="button" disabled={isRecovering} onClick={() => inputRef.current?.click()}>
+        <button
+          className="primary-button"
+          type="button"
+          disabled={isRecovering}
+          onClick={() => candidate ? void runRecovery(() => candidate) : inputRef.current?.click()}
+        >
           <Upload size={18} aria-hidden="true" />
-          {isRecovering ? '恢复中…' : '选择备份恢复'}
+          {isRecovering ? '恢复中…' : candidate ? '重新恢复' : '选择备份恢复'}
         </button>
+        {candidate ? (
+          <div className="form-actions">
+            <button
+              className="button secondary"
+              type="button"
+              disabled={isRecovering}
+              onClick={() => inputRef.current?.click()}
+            >
+              选择其他备份
+            </button>
+            <button
+              className="button secondary"
+              type="button"
+              disabled={isRecovering}
+              onClick={() => {
+                setCandidate(null)
+                setMessage('')
+              }}
+            >
+              取消恢复
+            </button>
+          </div>
+        ) : null}
         {message ? <p className="form-error" role="alert">{message}</p> : null}
         <p className="recovery-note">恢复完成前，原数据会保留在当前账号的本机数据库中。</p>
       </section>

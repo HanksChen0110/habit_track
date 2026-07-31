@@ -7,6 +7,7 @@ import {
   type ImportPreview
 } from '../../src/app/AppStore'
 import type { AuthStatus, AuthUser } from '../../src/auth/AuthContext'
+import { StoreIntegrityError } from '../../src/data/repository'
 import type { Store } from '../../src/domain/types'
 
 const authMock = vi.hoisted(() => ({
@@ -335,6 +336,133 @@ describe('AppStore server-confirmed writes', () => {
     expect(result.current.store).toEqual(confirmedB)
     expect(result.current.notice).toBe('数据已完整替换')
     expect(result.current.error).toBe('')
+  })
+
+  it('allows only confirmed import to recover an authenticated integrity-error account', async () => {
+    authenticate('user-a')
+    repositoryMock.read.mockRejectedValueOnce(
+      new StoreIntegrityError('完成记录引用不存在的习惯')
+    )
+    repositoryMock.replace.mockResolvedValueOnce(confirmedB)
+    const { result } = renderHook(() => useAppStore(), { wrapper })
+    await waitFor(() => expect(result.current.status).toBe('integrity-error'))
+
+    await expect(result.current.commit(() => candidateA)).resolves.toBe(false)
+    await expect(result.current.beginEmpty()).resolves.toBe(false)
+    await expect(result.current.beginDemo()).resolves.toBe(false)
+
+    const preview: ImportPreview = {
+      store: storeB,
+      habitCount: 1,
+      completionCount: 0
+    }
+    let recovered = false
+    await act(async () => {
+      recovered = await result.current.confirmImport(preview)
+    })
+
+    expect(recovered).toBe(true)
+    expect(repositoryMock.replace).toHaveBeenCalledOnce()
+    expect(repositoryMock.replace).toHaveBeenCalledWith(storeB)
+    expect(result.current.status).toBe('ready')
+    expect(result.current.store).toEqual(confirmedB)
+  })
+
+  it('publishes a distinct recovering state while integrity replacement is pending', async () => {
+    const replacement = deferred<Store>()
+    authenticate('user-a')
+    repositoryMock.read.mockRejectedValueOnce(
+      new StoreIntegrityError('完成记录引用不存在的习惯')
+    )
+    repositoryMock.replace.mockReturnValueOnce(replacement.promise)
+    const { result } = renderHook(() => useAppStore(), { wrapper })
+    await waitFor(() => expect(result.current.status).toBe('integrity-error'))
+    const preview: ImportPreview = {
+      store: storeB,
+      habitCount: 1,
+      completionCount: 0
+    }
+
+    let recovery!: Promise<boolean>
+    act(() => {
+      recovery = result.current.confirmImport(preview)
+    })
+
+    expect(result.current.status).toBe('recovering')
+    expect(result.current.store).toBeNull()
+
+    await act(async () => replacement.resolve(confirmedB))
+    await expect(recovery).resolves.toBe(true)
+  })
+
+  it('keeps integrity recovery available after replacement failure and permits direct retry', async () => {
+    authenticate('user-a')
+    repositoryMock.read.mockRejectedValueOnce(
+      new StoreIntegrityError('完成记录引用不存在的习惯')
+    )
+    repositoryMock.replace
+      .mockRejectedValueOnce(new Error('private replace detail'))
+      .mockResolvedValueOnce(confirmedB)
+    const { result } = renderHook(() => useAppStore(), { wrapper })
+    await waitFor(() => expect(result.current.status).toBe('integrity-error'))
+    const preview: ImportPreview = {
+      store: storeB,
+      habitCount: 1,
+      completionCount: 0
+    }
+
+    let recovered = true
+    await act(async () => {
+      recovered = await result.current.confirmImport(preview)
+    })
+
+    expect(recovered).toBe(false)
+    expect(result.current.status).toBe('integrity-error')
+    expect(result.current.store).toBeNull()
+    expect(result.current.error).not.toContain('private')
+
+    await act(async () => {
+      recovered = await result.current.confirmImport(preview)
+    })
+
+    expect(recovered).toBe(true)
+    expect(repositoryMock.replace).toHaveBeenCalledTimes(2)
+    expect(result.current.status).toBe('ready')
+    expect(result.current.store).toEqual(confirmedB)
+  })
+
+  it('discards a late integrity recovery after the authenticated account changes', async () => {
+    const recoveryA = deferred<Store>()
+    authenticate('user-a')
+    repositoryMock.read
+      .mockRejectedValueOnce(new StoreIntegrityError('账号 A 数据无效'))
+      .mockResolvedValueOnce(storeB)
+    repositoryMock.replace.mockReturnValueOnce(recoveryA.promise)
+    const rendered = renderHook(() => useAppStore(), { wrapper })
+    await waitFor(() => expect(rendered.result.current.status).toBe('integrity-error'))
+    const preview: ImportPreview = {
+      store: storeA,
+      habitCount: 1,
+      completionCount: 0
+    }
+
+    let resultA!: Promise<boolean>
+    act(() => {
+      resultA = rendered.result.current.confirmImport(preview)
+    })
+    expect(rendered.result.current.status).toBe('recovering')
+
+    authenticate('user-b')
+    rendered.rerender()
+    await waitFor(() => expect(rendered.result.current.store).toEqual(storeB))
+
+    await act(async () => recoveryA.resolve(confirmedA))
+
+    await expect(resultA).resolves.toBe(false)
+    expect(rendered.result.current.status).toBe('ready')
+    expect(rendered.result.current.store).toEqual(storeB)
+    expect(rendered.result.current.notice).toBe('')
+    expect(rendered.result.current.error).toBe('')
   })
 
   it('reloads the complete Store while retaining the last confirmation on failure', async () => {

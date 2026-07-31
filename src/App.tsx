@@ -7,6 +7,7 @@ import { Brand } from './components/Brand'
 import { InsightsPage } from './pages/InsightsPage'
 import { ManagePage } from './pages/ManagePage'
 import { OnboardingPage } from './pages/OnboardingPage'
+import { RecoveryPage } from './pages/RecoveryPage'
 import { TodayPage } from './pages/TodayPage'
 import { WeekPage } from './pages/WeekPage'
 import './styles.css'
@@ -196,6 +197,10 @@ function AppRoutes() {
 
   if (!store && status === 'error') {
     return <InitialReadError />
+  }
+
+  if (!store && (status === 'integrity-error' || status === 'recovering')) {
+    return <RecoveryPage />
   }
 
   if (!store) {

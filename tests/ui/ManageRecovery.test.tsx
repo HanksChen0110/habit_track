@@ -91,6 +91,63 @@ describe('ManagePage account writes', () => {
     expect(submit).toBeEnabled()
   })
 
+  it('shows and announces the habit saving state from inside the form', async () => {
+    const user = userEvent.setup()
+    const save = deferred<boolean>()
+    mocks.appStore.commit.mockReturnValueOnce(save.promise)
+    renderManage()
+
+    await user.click(screen.getByRole('button', { name: '创建习惯' }))
+    await user.type(screen.getByLabelText('习惯名称'), '散步')
+    await user.click(screen.getByRole('button', { name: '保存习惯' }))
+
+    const dialog = screen.getByRole('dialog', { name: '创建习惯' })
+    expect(within(dialog).getByRole('button', { name: '保存中…' })).toBeDisabled()
+    expect(within(dialog).getByRole('status')).toHaveTextContent('正在保存习惯…')
+
+    await act(async () => save.resolve(false))
+  })
+
+  it('truly disables the modal close control while a habit save is pending', async () => {
+    const user = userEvent.setup()
+    const save = deferred<boolean>()
+    mocks.appStore.commit.mockReturnValueOnce(save.promise)
+    renderManage()
+
+    await user.click(screen.getByRole('button', { name: '创建习惯' }))
+    await user.type(screen.getByLabelText('习惯名称'), '散步')
+    await user.click(screen.getByRole('button', { name: '保存习惯' }))
+
+    const close = screen.getByRole('button', { name: '关闭创建习惯' })
+    expect(close).toBeDisabled()
+    await user.click(close)
+    expect(screen.getByRole('dialog', { name: '创建习惯' })).toBeInTheDocument()
+
+    await act(async () => save.resolve(false))
+    expect(close).toBeEnabled()
+  })
+
+  it('does not restore focus to the background when a modal rerenders as pending', async () => {
+    const user = userEvent.setup()
+    const save = deferred<boolean>()
+    mocks.appStore.commit.mockReturnValueOnce(save.promise)
+    renderManage()
+    const opener = screen.getByRole('button', { name: '创建习惯' })
+    const openerFocus = vi.spyOn(opener, 'focus')
+
+    await user.click(opener)
+    openerFocus.mockClear()
+    await user.type(screen.getByLabelText('习惯名称'), '散步')
+    await user.click(screen.getByRole('button', { name: '保存习惯' }))
+
+    const dialog = screen.getByRole('dialog', { name: '创建习惯' })
+    expect(openerFocus).not.toHaveBeenCalled()
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
+
+    await act(async () => save.resolve(false))
+    openerFocus.mockRestore()
+  })
+
   it('closes create and edit forms only after a true account save result', async () => {
     const user = userEvent.setup()
     mocks.appStore.commit
@@ -238,7 +295,53 @@ describe('RecoveryPage account replacement', () => {
     await act(async () => replacement.resolve(false))
 
     expect(input).toBeEnabled()
+    expect(screen.getByRole('button', { name: '重新恢复' })).toBeEnabled()
+  })
+
+  it('keeps the validated recovery candidate after false and retries it directly until success', async () => {
+    const user = userEvent.setup()
+    const preview = { store, habitCount: 1, completionCount: 0 }
+    mocks.appStore.previewImport.mockReturnValueOnce(preview)
+    mocks.appStore.confirmImport
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+    renderRecovery()
+
+    await user.upload(
+      screen.getByLabelText('选择 JSON 备份'),
+      new File([JSON.stringify(store)], 'retry.json', { type: 'application/json' })
+    )
+
+    expect(await screen.findByRole('button', { name: '重新恢复' })).toBeEnabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('恢复未完成，请重试。')
+
+    await user.click(screen.getByRole('button', { name: '重新恢复' }))
+
+    expect(mocks.appStore.previewImport).toHaveBeenCalledTimes(1)
+    expect(mocks.appStore.confirmImport).toHaveBeenCalledTimes(2)
+    expect(mocks.appStore.confirmImport).toHaveBeenNthCalledWith(2, preview)
     expect(screen.getByRole('button', { name: '选择备份恢复' })).toBeEnabled()
+  })
+
+  it('allows the same recovery file to be selected again after a failed candidate', async () => {
+    const user = userEvent.setup()
+    const preview = { store, habitCount: 1, completionCount: 0 }
+    mocks.appStore.previewImport.mockReturnValue(preview)
+    mocks.appStore.confirmImport.mockResolvedValue(false)
+    renderRecovery()
+    const input = screen.getByLabelText('选择 JSON 备份')
+    const file = new File([JSON.stringify(store)], 'same-file.json', {
+      type: 'application/json'
+    })
+
+    await user.upload(input, file)
+    await screen.findByRole('button', { name: '重新恢复' })
+    await user.click(screen.getByRole('button', { name: '选择其他备份' }))
+    await user.upload(input, file)
+
+    await waitFor(() => expect(mocks.appStore.previewImport).toHaveBeenCalledTimes(2))
+    expect(mocks.appStore.confirmImport).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: '重新恢复' })).toBeEnabled()
   })
 
   it('describes account-local recovery and keeps the page after a rejected replacement without leaking details', async () => {
@@ -260,8 +363,33 @@ describe('RecoveryPage account replacement', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('恢复未完成，请重试。')
     expect(screen.getByRole('heading', { name: '账号数据需要恢复' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重新恢复' })).toBeEnabled()
     expect(screen.queryByText(/relation habits|token=private/)).not.toBeInTheDocument()
     expect(input).toBeEnabled()
+  })
+
+  it('clears a failed recovery candidate only after explicit cancellation', async () => {
+    const user = userEvent.setup()
+    mocks.appStore.previewImport.mockReturnValueOnce({
+      store,
+      habitCount: 1,
+      completionCount: 0
+    })
+    mocks.appStore.confirmImport.mockResolvedValueOnce(false)
+    renderRecovery()
+
+    await user.upload(
+      screen.getByLabelText('选择 JSON 备份'),
+      new File([JSON.stringify(store)], 'cancel.json', { type: 'application/json' })
+    )
+    await screen.findByRole('button', { name: '重新恢复' })
+
+    await user.click(screen.getByRole('button', { name: '取消恢复' }))
+
+    expect(screen.queryByRole('button', { name: '重新恢复' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择备份恢复' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.appStore.confirmImport).toHaveBeenCalledTimes(1)
   })
 
   it('does not start account replacement for an invalid recovery backup', async () => {

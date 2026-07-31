@@ -1,6 +1,6 @@
 import { validateStore } from '../domain/store'
 import type { Completion, Habit, Store } from '../domain/types'
-import type { StoreRepository } from './repository'
+import { StoreIntegrityError, type StoreRepository } from './repository'
 import { getSupabaseClient } from './supabaseClient'
 
 const PAGE_SIZE = 1000
@@ -194,7 +194,7 @@ export class SupabaseStoreRepository
       }))
     }
     const validation = validateStore(store)
-    if (!validation.ok) throw new Error(validation.errors.join('；'))
+    if (!validation.ok) throw new StoreIntegrityError(validation.errors.join('；'))
 
     return store
   }

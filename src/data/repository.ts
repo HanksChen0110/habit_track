@@ -8,6 +8,13 @@ export interface ImportPreview {
   completionCount: number
 }
 
+export class StoreIntegrityError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StoreIntegrityError'
+  }
+}
+
 export interface StoreRepository {
   read(): Promise<Store | null>
   commit(previous: Store, candidate: Store): Promise<Store>
@@ -18,7 +25,7 @@ export interface StoreRepository {
 
 function requireValidStore(candidate: unknown, today: string): Store {
   const result = validateStore(candidate, today)
-  if (!result.ok) throw new Error(result.errors.join('；'))
+  if (!result.ok) throw new StoreIntegrityError(result.errors.join('；'))
   return structuredClone(candidate as Store)
 }
 

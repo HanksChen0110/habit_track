@@ -186,28 +186,31 @@ export function ManagePage() {
       </aside>
 
       {formMode && (
-        <Modal title={formMode === 'create' ? '创建习惯' : '编辑习惯'} onClose={() => pendingAction !== 'habit' && setFormMode(null)}>
-          <fieldset
-            disabled={pendingAction === 'habit'}
-            aria-busy={pendingAction === 'habit'}
-            style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
-          >
-            <HabitForm
-              habit={formMode === 'create' ? undefined : formMode}
-              targetLocked={
-                formMode !== 'create' &&
-                (formMode.createdOn !== today ||
-                  store.completions.some((item) => item.habitId === formMode.id))
-              }
-              onSubmit={saveHabit}
-              onCancel={() => setFormMode(null)}
-            />
-          </fieldset>
+        <Modal
+          title={formMode === 'create' ? '创建习惯' : '编辑习惯'}
+          closeDisabled={pendingAction === 'habit'}
+          onClose={() => pendingAction !== 'habit' && setFormMode(null)}
+        >
+          <HabitForm
+            habit={formMode === 'create' ? undefined : formMode}
+            targetLocked={
+              formMode !== 'create' &&
+              (formMode.createdOn !== today ||
+                store.completions.some((item) => item.habitId === formMode.id))
+            }
+            saving={pendingAction === 'habit'}
+            onSubmit={saveHabit}
+            onCancel={() => setFormMode(null)}
+          />
         </Modal>
       )}
 
       {archiveCandidate && (
-        <Modal title="归档习惯" onClose={() => pendingAction !== 'archive' && setArchiveCandidate(null)}>
+        <Modal
+          title="归档习惯"
+          closeDisabled={pendingAction === 'archive'}
+          onClose={() => pendingAction !== 'archive' && setArchiveCandidate(null)}
+        >
           <div className="confirm-copy">
             <p>归档“{archiveCandidate.name}”后，它在今天仍计入计划，从明天起不再出现。</p>
             <p className="helper-text">所有历史记录和周报都会保留。</p>
@@ -227,7 +230,11 @@ export function ManagePage() {
       )}
 
       {importCandidate && (
-        <Modal title="确认替换数据" onClose={() => pendingAction !== 'import' && setImportCandidate(null)}>
+        <Modal
+          title="确认替换数据"
+          closeDisabled={pendingAction === 'import'}
+          onClose={() => pendingAction !== 'import' && setImportCandidate(null)}
+        >
           <div className="import-preview">
             <p>
               文件已通过完整校验。这份完整 JSON 备份只会替换当前账号本机数据库中的全部习惯与完成记录；替换失败时，原数据不会被覆盖。

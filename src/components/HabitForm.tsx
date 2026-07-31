@@ -4,11 +4,13 @@ import type { Habit } from '../domain/types'
 export function HabitForm({
   habit,
   targetLocked = false,
+  saving = false,
   onSubmit,
   onCancel
 }: {
   habit?: Habit
   targetLocked?: boolean
+  saving?: boolean
   onSubmit: (values: { name: string; targetPerDay: number }) => void
   onCancel: () => void
 }) {
@@ -19,6 +21,7 @@ export function HabitForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    if (saving) return
     const parsedTarget = Number(target)
     const nextNameError = name.trim() ? '' : '请输入习惯名称'
     const nextTargetError =
@@ -30,12 +33,13 @@ export function HabitForm({
   }
 
   return (
-    <form className="stack-form" onSubmit={submit}>
+    <form className="stack-form" aria-busy={saving} onSubmit={submit}>
       <label htmlFor="habit-name">
         <span>习惯名称</span>
         <input
           id="habit-name"
           autoFocus
+          disabled={saving}
           value={name}
           onChange={(event) => setName(event.target.value)}
           aria-invalid={Boolean(nameError)}
@@ -53,7 +57,7 @@ export function HabitForm({
           step="1"
           inputMode="numeric"
           value={target}
-          disabled={targetLocked}
+          disabled={targetLocked || saving}
           onChange={(event) => setTarget(event.target.value)}
           aria-invalid={Boolean(targetError)}
           aria-describedby={targetError ? 'habit-target-error' : targetLocked ? 'habit-target-lock' : undefined}
@@ -66,9 +70,16 @@ export function HabitForm({
           该目标已进入历史统计。若要更改，请归档旧习惯后新建。
         </p>
       )}
+      {saving ? (
+        <p className="helper-text" role="status" aria-live="polite">
+          正在保存习惯…
+        </p>
+      ) : null}
       <div className="form-actions">
-        <button className="button secondary" type="button" onClick={onCancel}>取消</button>
-        <button className="button primary" type="submit">保存习惯</button>
+        <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>取消</button>
+        <button className="button primary" type="submit" disabled={saving}>
+          {saving ? '保存中…' : '保存习惯'}
+        </button>
       </div>
     </form>
   )
