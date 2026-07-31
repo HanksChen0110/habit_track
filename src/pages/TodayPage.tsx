@@ -1,9 +1,8 @@
-import { ArrowRight, Plus } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { ArrowRight, Check, Minus, Plus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAppStore } from '../app/AppStore'
 import { HabitForm } from '../components/HabitForm'
-import { HabitRow } from '../components/HabitRow'
 import { Modal } from '../components/Modal'
 import { parseLocalDate, recentSevenDays } from '../domain/dates'
 import { adjustCompletion, createHabit, isHabitActiveOn } from '../domain/store'
@@ -19,6 +18,21 @@ export function TodayPage() {
   const { store, today, commit } = useAppStore()
   const [selectedDate, setSelectedDate] = useState(today)
   const [showCreate, setShowCreate] = useState(false)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const [adjustmentFeedback, setAdjustmentFeedback] = useState<{
+    key: string
+    state: 'saving' | 'saved' | 'error'
+  } | null>(null)
+  const pendingActionRef = useRef<string | null>(null)
+  const feedbackTimerRef = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current)
+    },
+    []
+  )
+
   if (!store) return null
 
   const activeHabits = store.habits.filter((habit) => isHabitActiveOn(habit, selectedDate))
@@ -33,16 +47,59 @@ export function TodayPage() {
     [store, today]
   )
 
-  const create = (values: { name: string; targetPerDay: number }) => {
-    const saved = commit((current) =>
-      createHabit(current, {
-        id: crypto.randomUUID(),
-        name: values.name,
-        targetPerDay: values.targetPerDay,
-        today
-      })
-    )
-    if (saved) setShowCreate(false)
+  const create = async (values: { name: string; targetPerDay: number }) => {
+    if (pendingActionRef.current !== null) return
+    pendingActionRef.current = 'create'
+    setPendingAction('create')
+    try {
+      const saved = await commit((current) =>
+        createHabit(current, {
+          id: crypto.randomUUID(),
+          name: values.name,
+          targetPerDay: values.targetPerDay,
+          today
+        })
+      )
+      if (saved) setShowCreate(false)
+    } catch {
+      // AppStore owns the persistent account write error.
+    } finally {
+      if (pendingActionRef.current === 'create') {
+        pendingActionRef.current = null
+        setPendingAction(null)
+      }
+    }
+  }
+
+  const adjust = async (habitId: string, delta: number) => {
+    if (pendingActionRef.current !== null) return
+    const feedbackKey = `${habitId}:${selectedDate}`
+    const action = `completion:${feedbackKey}`
+    pendingActionRef.current = action
+    setPendingAction(action)
+    if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current)
+    setAdjustmentFeedback({ key: feedbackKey, state: 'saving' })
+
+    try {
+      const saved = await commit((current) =>
+        adjustCompletion(current, habitId, selectedDate, delta, today)
+      )
+      setAdjustmentFeedback({ key: feedbackKey, state: saved ? 'saved' : 'error' })
+      if (saved) {
+        feedbackTimerRef.current = window.setTimeout(() => {
+          setAdjustmentFeedback((current) =>
+            current?.key === feedbackKey && current.state === 'saved' ? null : current
+          )
+        }, 1000)
+      }
+    } catch {
+      setAdjustmentFeedback({ key: feedbackKey, state: 'error' })
+    } finally {
+      if (pendingActionRef.current === action) {
+        pendingActionRef.current = null
+        setPendingAction(null)
+      }
+    }
   }
 
   return (
@@ -61,6 +118,7 @@ export function TodayPage() {
             className="button primary compact"
             type="button"
             aria-label="快速创建习惯"
+            disabled={pendingAction !== null}
             onClick={() => setShowCreate(true)}
           >
             <Plus size={17} /> 创建习惯
@@ -111,19 +169,63 @@ export function TodayPage() {
               <span className="empty-mark"><Plus size={22} /></span>
               <h2>先创建一个每日习惯</h2>
               <p>从一件真正想持续的事开始，目标可以是每天一次或多次。</p>
-              <button className="button primary" type="button" onClick={() => setShowCreate(true)}>创建习惯</button>
+              <button className="button primary" type="button" disabled={pendingAction !== null} onClick={() => setShowCreate(true)}>创建习惯</button>
             </div>
           ) : (
-            activeHabits.map((habit) => (
-              <HabitRow
-                key={habit.id}
-                habit={habit}
-                count={completionFor(habit.id)}
-                onAdjust={(delta) =>
-                  commit((current) => adjustCompletion(current, habit.id, selectedDate, delta, today))
-                }
-              />
-            ))
+            activeHabits.map((habit) => {
+              const count = completionFor(habit.id)
+              const completed = count >= habit.targetPerDay
+              const feedbackKey = `${habit.id}:${selectedDate}`
+              const saveState =
+                adjustmentFeedback?.key === feedbackKey ? adjustmentFeedback.state : 'idle'
+              const detail =
+                saveState === 'saving'
+                  ? '保存中…'
+                  : saveState === 'saved'
+                    ? '已保存'
+                    : saveState === 'error'
+                      ? '未保存，请重试'
+                      : completed
+                        ? '今日目标已完成'
+                        : `还差 ${habit.targetPerDay - count} 次`
+
+              return (
+                <article
+                  className={`habit-row ${completed ? 'is-complete' : ''}`}
+                  data-testid="habit-row"
+                  key={habit.id}
+                >
+                  <div className="habit-identity">
+                    <span className="habit-status" aria-hidden="true">
+                      {completed ? <Check size={16} /> : <span />}
+                    </span>
+                    <div>
+                      <h3>{habit.name}</h3>
+                      <p aria-live="polite">{detail}</p>
+                    </div>
+                  </div>
+                  <div className="stepper">
+                    <button
+                      type="button"
+                      onClick={() => void adjust(habit.id, -1)}
+                      disabled={pendingAction !== null || count === 0}
+                      aria-label={`${habit.name}，减少一次`}
+                    >
+                      <Minus size={17} />
+                    </button>
+                    <strong>{count} / {habit.targetPerDay}</strong>
+                    <button
+                      type="button"
+                      onClick={() => void adjust(habit.id, 1)}
+                      disabled={pendingAction !== null || completed}
+                      aria-label={`${habit.name}，增加一次`}
+                    >
+                      <Plus size={17} />
+                    </button>
+                  </div>
+                </article>
+              )
+            })
           )}
         </div>
         <Link className="button primary full mobile-week-link" to="/week">
@@ -152,8 +254,16 @@ export function TodayPage() {
       </aside>
 
       {showCreate && (
-        <Modal title="创建习惯" onClose={() => setShowCreate(false)}>
-          <HabitForm onSubmit={create} onCancel={() => setShowCreate(false)} />
+        <Modal
+          title="创建习惯"
+          closeDisabled={pendingAction === 'create'}
+          onClose={() => pendingAction !== 'create' && setShowCreate(false)}
+        >
+          <HabitForm
+            saving={pendingAction === 'create'}
+            onSubmit={create}
+            onCancel={() => pendingAction !== 'create' && setShowCreate(false)}
+          />
         </Modal>
       )}
     </div>
