@@ -1,0 +1,80 @@
+# LESSONS — 跨任务失败知识库
+
+> 仅记录已经发生、可复用且有证据的失败模式。DEV 开始任务前按关键词检查；没有命中时不臆造经验。
+
+## 索引
+
+- L-001：PostgREST 省略所有权列时，RLS 不会自动替 insert 补值
+- L-002：不要用 CSS animationend 管理业务状态生命周期
+- L-003：Supabase credential Promise 与 auth event 的顺序不是单一权威
+
+## 条目
+
+### L-001 · [postgres, rls, postgrest] 省略所有权列时，RLS 不会自动替 insert 补值
+
+- **首发**：local-postgres-backend · T07 / T-FIX-01 · 2026-08-01
+- **上次复核**：2026-08-01
+- **适用栈**：Supabase Data API / PostgREST / Postgres RLS
+- **状态**：active
+- **关键词**：RLS PostgREST upsert insert user_id auth.uid default ownership 42501
+
+**问题场景**
+客户端按“不信任客户端 user_id”原则省略所有权列，直接向带 `user_id NOT NULL` 与 RLS 的表 insert/upsert。
+
+**当时尝试的方案**
+只写 RLS `with check (auth.uid() = user_id)`，期待数据库自动知道当前账号。
+
+**为什么不行**
+RLS 只校验行，不生成列值；没有 default 时 PostgREST payload 缺 `user_id`，真实写入以 `42501` 失败。单元 mock 没暴露，pgTAP RED 为 23/27。
+
+**当前推荐做法**
+所有权列使用 `DEFAULT auth.uid()`，保留 NOT NULL、复合键和 RLS；同时测试“省略所有权成功”与“显式伪造其他账号仍失败”。见 `@.specs/archive/2026-08-01-local-postgres-backend/T-FIX-01-SUMMARY.md`。
+
+**何时可重新评估**
+改为只通过 SECURITY INVOKER RPC 写入、记录级 Data API 不再使用时。
+
+### L-002 · [react, accessibility, motion] 不要用 CSS animationend 管理业务状态生命周期
+
+- **首发**：local-postgres-backend · T-FIX-04 · 2026-08-01
+- **上次复核**：2026-08-01
+- **适用栈**：React 18+ / CSS prefers-reduced-motion
+- **状态**：active
+- **关键词**：toast notice animationend reduced-motion timer aria-live lifecycle
+
+**问题场景**
+短暂成功 Toast 需要自动清除，视觉上同时支持 reduced-motion。
+
+**当时尝试的方案**
+只在 Toast 的 `animationend` 事件中清除 notice。
+
+**为什么不行**
+`prefers-reduced-motion: reduce` 将动画设为 `none` 后不会触发事件，成功提示永久残留并持续表达过期状态。
+
+**当前推荐做法**
+React effect/timer 管理状态生命周期并在新值/卸载时 cleanup；CSS 动画只负责视觉。见 `@.specs/archive/2026-08-01-local-postgres-backend/T-FIX-04-SUMMARY.md`。
+
+**何时可重新评估**
+改用自身提供状态生命周期且明确覆盖 reduced-motion 的 Toast 组件时。
+
+### L-003 · [supabase, auth, race] credential Promise 与 auth event 的顺序不是单一权威
+
+- **首发**：local-postgres-backend · T05 · 2026-08-01
+- **上次复核**：2026-08-01
+- **适用栈**：React / Supabase Auth browser client
+- **状态**：active
+- **关键词**：Supabase Auth onAuthStateChange SIGNED_IN signIn promise race session switch signOut
+
+**问题场景**
+登录、切账号、退出与会话恢复可能交错；既有账号仍在 UI 中时又发起 credential 请求。
+
+**当时尝试的方案**
+把 credential Promise 返回或任意一次 `SIGNED_IN` 事件直接当最终权威并立即覆盖当前 Session。
+
+**为什么不行**
+事件和 Promise 会以不同顺序到达；迟到 `SIGNED_IN`、失败切账号、signOut 与 pending credential 交错可能恢复错误账号。T05 经 4 轮竞态修复才关闭。
+
+**当前推荐做法**
+串行 credential 请求；用 generation、请求邮箱、起始账号和权威 Session 共同判定；对迟到事件恢复权威 Session，所有外部失败只返回脱敏类别。见 `@.specs/archive/2026-08-01-local-postgres-backend/T05-SUMMARY.md`。
+
+**何时可重新评估**
+Supabase Auth 明确提供原子账号切换 API，或应用禁止已登录状态下发起其他账号 credential 请求时。

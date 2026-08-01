@@ -1,0 +1,239 @@
+# ARCHITECTURE — 项目级系统架构（活文档）
+
+- **维护者**：`flow-kit/prompts/A-architect.md`（首次 / 重构）+ `flow-kit/prompts/A-evolve.md`（增量同步 ADR）
+- **首次创建**：2026-07-31
+- **最近修订**：2026-07-31（A-architect 首跑）
+- **当前 ADR 编号最大值**：ADR-005
+
+> `CONTEXT.md` 回答“AI 实施时遵守什么”；本文件回答“系统怎么搭起来”；单次 change 的 `DESIGN.md` 回答“这次变更怎么做”。
+> 本次只沉淀当前结构，不修改业务代码。ADR 的推翻成本没有现成项目证据，按用户确认统一标为“待确认”，不猜测。
+
+---
+
+## 1. 系统概览
+
+### 1.1 一句话定位
+
+一个面向单个个人用户、仅在浏览器本地保存数据的习惯记录、周复盘与长期洞察 PWA。— 来源：`@AGENTS.md:6-12`、`@openspec/changes/build-habit-review-mvp/design.md:1-20`
+
+### 1.2 服务边界图
+
+```mermaid
+graph LR
+  User["单个浏览器用户"] --> UI["React 页面与组件"]
+  UI --> AppStore["AppStoreProvider"]
+  AppStore --> Domain["日期、Store、周报、洞察、共现"]
+  AppStore --> Repository["LocalStoreRepository"]
+  Repository --> LocalStorage[("localStorage: xunji.store.v1")]
+  PWA["PWA 应用壳缓存"] --> UI
+```
+
+- 页面与路由入口见 `@src/App.tsx:12-42`。
+- 应用状态、提交顺序和跨标签更新见 `@src/app/AppStore.tsx:16-128`。
+- 本地数据边界见 `@src/data/repository.ts:11-72`。
+- PWA 应用壳配置见 `@vite.config.ts:1-29`。
+- 2026-07-31 核验期间工作区另行出现未提交 Supabase 依赖和 `supabase/config.toml`，但当前 `src/` 没有引用；它不在上图中，接入意图待确认。— 来源：`@package.json:16-35`、`@supabase/config.toml`、2026-07-31 二次扫描
+
+### 1.3 关键非功能性指标（NFR 基线）
+
+| 维度 | 当前基线 | 来源 |
+|---|---|---|
+| 服务端 QPS / P95 | 当前实现 N/A；无服务端请求链路。未提交 Supabase 资产尚未接入，不据此声明已有后端 | `@openspec/changes/build-habit-review-mvp/design.md:24-33`、2026-07-31 `src/` 二次扫描 |
+| 并发用户 | 单个个人用户；多标签页通过 `storage` 事件重新读取 | `@AGENTS.md:6-12`、`@src/data/repository.ts:61-72` |
+| 数据量 / 存储上限 | 待确认 / 待实测；依赖浏览器 `localStorage`，项目没有容量报告 | 2026-07-31 代码与规格扫描 |
+| 可用性目标 | 无生产 SLA；已缓存应用壳应可离线打开 | `@openspec/changes/build-habit-review-mvp/specs/responsive-pwa-experience/spec.md:32-37` |
+| 响应式基线 | 主体在 320、390、768、1024、1440px 无横向溢出；小于 1024px 单列 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:69-81`、`@openspec/changes/build-habit-review-mvp/UI-spec.md:136-140` |
+| 无障碍基线 | 44×44px 最小交互尺寸、可见焦点、键盘可达、状态不只依赖颜色 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:50-63`、`@openspec/changes/build-habit-review-mvp/UI-spec.md:128-134` |
+| 当前自动验证 | typecheck 通过；Vitest 9 文件 51/51；两个 OpenSpec strict 通过 | 2026-07-31 本轮命令输出 |
+| E2E 浏览器矩阵 | Playwright Desktop Chrome 1440×1000、Pixel 7 390×844；测试内部另覆盖目标宽度 | `@playwright.config.ts:11-19`、`@tests/e2e/app.spec.ts:244-326` |
+
+## 2. 模块清单 + 边界
+
+### 2.1 模块表
+
+| 模块 | 路径 | 职责 | 直接依赖 | 暴露给谁 | 来源 |
+|---|---|---|---|---|---|
+| 启动与路由 | `src/main.tsx`、`src/App.tsx` | 挂载 React、提供 HashRouter、按 Store 状态选择 onboarding / recovery / 主页面 | `app`、`components`、`pages` | 浏览器入口 | `@src/main.tsx:1-10`、`@src/App.tsx:1-42` |
+| 应用状态 | `src/app/AppStore.tsx` | 读取 Store、提交候选、通知、错误、导入导出、跨标签更新 | `data`、`domain` | 页面与应用壳 | `@src/app/AppStore.tsx:16-128` |
+| 数据访问 | `src/data/` | `localStorage` Repository、JSON 导入导出、示例 Store | `domain` | `app` | `@src/data/repository.ts:1-72`、`@src/data/demo.ts:1-53` |
+| 领域模型 | `src/domain/types.ts`、`store.ts` | Store 类型、习惯生命周期、记录命令、完整校验 | `dates` | `data`、`app`、`pages`、洞察组件 | `@src/domain/types.ts:1-47`、`@src/domain/store.ts:1-235` |
+| 日期与周报 | `src/domain/dates.ts`、`weeklyReport.ts` | 本地日期、自然周和周报纯计算 | `types`、`store` | 今天页、本周页、测试 | `@src/domain/dates.ts:1-66`、`@src/domain/weeklyReport.ts:1-74` |
+| 洞察与共现 | `src/domain/insightTypes.ts`、`insights.ts`、`coOccurrence.ts` | 观察窗口、趋势、习惯表现、共现与样本等级纯计算 | `dates`、`store`、`types` | 洞察页与详情组件 | `@src/domain/insights.ts:1-199`、`@src/domain/coOccurrence.ts:1-122` |
+| 页面 | `src/pages/` | 今天、本周、洞察、管理、首次进入和恢复流程 | `app`、`components`、`domain` | 路由 | `@src/App.tsx:22-29` |
+| 可复用组件 | `src/components/` | 应用壳、弹窗、习惯行、表单和洞察展示 | `app`、`domain` 类型 / 函数 | 页面 | `@src/components/AppShell.tsx:1-50`、`@src/components/Modal.tsx:1-69` |
+| 样式 | `src/styles.css` | UI 令牌、布局、响应式和动效实现 | 无 TS 模块依赖 | 全应用 | `@src/App.tsx:10` |
+| 测试 | `tests/domain`、`tests/data`、`tests/ui`、`tests/e2e` | 从规格边界验证领域、Repository、页面和浏览器流程 | 应用各层 | 质量门 | `@package.json:7-14`、`@playwright.config.ts:3-19` |
+
+### 2.2 模块依赖规则（当前事实与待锁规则）
+
+当前 import 关系呈现以下方向：
+
+```text
+App / pages / components → app + domain
+app → data + domain
+data → domain
+domain 内部 → types / dates / store / insightTypes
+```
+
+- 以上是 2026-07-31 从 `src/` import 扫描得到的当前事实，不自动升级为长期 hard rule。
+- 当前领域文件未依赖 React、页面或 Repository；数据访问只依赖领域校验和类型。— 来源：`@src/domain/store.ts:1-2`、`@src/data/repository.ts:1-3`
+- **待确认**：未来是否正式锁定“`domain` 不依赖 `app/data/pages/components`”和“页面不得直接访问 `localStorage`”。在确认前，若 change 需要反向依赖，应在该 change 的 DESIGN 中显式说明。
+
+## 3. ADR 列表（Architecture Decision Records）
+
+### ADR-001 · 采用纯浏览器单页 PWA，不引入后端
+
+- **状态**：accepted（来源规格已确认）
+- **取舍**：纯客户端单设备 / 账号与云同步 / 手动导入导出作为日常同步
+- **决定**：React 单页 PWA；日常交互、统计和数据管理都在当前浏览器完成。
+- **理由**：首轮验证只需要单设备个人使用，本地架构降低隐私、部署和运维成本。
+- **代价**：不同设备数据互不相通；导入导出只适合备份与迁移。
+- **来源 change**：`build-habit-review-mvp`
+- **来源**：`@openspec/changes/build-habit-review-mvp/design.md:24-33`、`@openspec/changes/build-habit-review-mvp/design.md:128-136`
+- **推翻成本**：待确认
+
+### ADR-002 · Store v1 单快照持久化与不可变历史口径
+
+- **状态**：accepted（来源规格已确认）
+- **取舍**：版本化完整 Store / 分散键值 / 目标版本历史
+- **决定**：`Habit[] + Completion[]` 组成 Store v1，完整写入固定 `localStorage` 键；统计按日期当时有效的习惯与目标计算。
+- **理由**：用最少数据结构保证历史可信，并允许完整 JSON 校验、导出和恢复。
+- **代价**：目标锁定后必须归档旧习惯再新建；Store 结构变化需要显式迁移。
+- **来源 change**：`build-habit-review-mvp`
+- **来源**：`@openspec/changes/build-habit-review-mvp/design.md:35-64`、`@src/data/repository.ts:11-37`
+- **推翻成本**：待确认
+
+### ADR-003 · 使用本地自然日和领域纯函数计算统计
+
+- **状态**：accepted（来源规格已确认）
+- **取舍**：浏览器本地自然日 / UTC 日期；领域纯函数 / 页面内临时统计
+- **决定**：日期使用本地 `YYYY-MM-DD`；周报、洞察和共现由 `src/domain/` 的纯计算函数生成。
+- **理由**：避免 UTC 跨日误差，并使日期边界、部分完成和历史口径可自动测试。
+- **代价**：跨时区迁移数据的语义未另行建模；当前实现按使用设备的本地日历解释日期。
+- **来源 change**：`build-habit-review-mvp`、`add-insights-dashboard`
+- **来源**：`@openspec/changes/build-habit-review-mvp/design.md:9-14`、`@openspec/changes/build-habit-review-mvp/design.md:66-76`、`@src/domain/dates.ts:3-66`
+- **推翻成本**：待确认
+
+### ADR-004 · 同一产品双端完整闭环，1024px 切换信息层级
+
+- **状态**：accepted（来源规格已确认）
+- **取舍**：两端功能一致的响应式布局 / 按设备拆功能 / 独立客户端
+- **决定**：今天、本周、洞察和管理在所有设备可达；320–1023px 单列和底部导航，1024px 及以上采用桌面层级。
+- **理由**：手机优先快速记录，桌面突出复盘，但用户无需换设备完成核心闭环。
+- **代价**：两套响应式信息层级和导航需要同时维护与验证。
+- **来源 change**：`build-habit-review-mvp`、`add-insights-dashboard`
+- **来源**：`@openspec/changes/build-habit-review-mvp/design.md:78-80`、`@openspec/changes/build-habit-review-mvp/UI-spec.md:67-81`
+- **推翻成本**：待确认
+
+### ADR-005 · UI 资源本地化，图表使用原生 SVG / CSS
+
+- **状态**：accepted（来源规格已确认）
+- **取舍**：本地字体与原生图表 / 在线字体、远程图片和第三方图表或动效库
+- **决定**：项目内打包 Noto Sans SC Variable，图标使用 Lucide，图表用原生 SVG / CSS，不引入在线字体、远程图片或第三方图表库。
+- **理由**：保持离线可用、依赖少和统一的可访问表达。
+- **代价**：复杂图表交互和绘制能力由项目自行维护。
+- **来源 change**：`build-habit-review-mvp`、`add-insights-dashboard`
+- **来源**：`@openspec/changes/build-habit-review-mvp/UI-spec.md:7-13`、`@openspec/changes/add-insights-dashboard/design.md:1-4`
+- **推翻成本**：待确认
+
+## 4. 跨模块契约
+
+### 4.1 浏览器路由
+
+| 路径 | 页面 | 入口契约 | 来源 |
+|---|---|---|---|
+| `/today` | `TodayPage` | 默认主路径；记录今天或最近七天完成量 | `@src/App.tsx:22-29`、`@src/pages/TodayPage.tsx:18-161` |
+| `/week` | `WeekPage` | 当前周与历史自然周复盘 | `@src/App.tsx:24-28`、`@src/pages/WeekPage.tsx:12-112` |
+| `/insights` | `InsightsPage` | 7 / 30 / 90 天洞察与页内下钻 | `@src/App.tsx:24-28`、`@src/pages/InsightsPage.tsx:21-171` |
+| `/manage` | `ManagePage` | 创建、编辑、归档、导入导出；可用 `?habit=<id>` 定位习惯 | `@src/App.tsx:24-28`、`@src/pages/ManagePage.tsx:11-217` |
+
+- 路由使用 HashRouter，未知路径重定向到 `/today`。— 来源：`@src/App.tsx:1-42`
+- 无有效 Store 时，所有路径转到首次进入页或恢复页。— 来源：`@src/App.tsx:12-20`
+
+### 4.2 应用状态与持久化契约
+
+```text
+页面命令
+  → AppStore.commit(buildNext)
+  → 基于当前 Store 构建候选快照
+  → LocalStoreRepository.write 完整校验
+  → localStorage 写入成功
+  → 更新 React state + 成功提示
+```
+
+- 失败时 `commit` 返回 `false`，保留此前 Store 并显示错误。— 来源：`@src/app/AppStore.tsx:75-90`
+- 其他标签页更新固定键时，当前页重新读取有效 Store 并提示。— 来源：`@src/data/repository.ts:61-72`、`@src/app/AppStore.tsx:65-73`
+- 导入必须先 `previewImport` 完整校验，再由用户确认后整体替换。— 来源：`@src/data/repository.ts:39-55`、`@src/pages/ManagePage.tsx:192-213`
+
+### 4.3 Store schema（顶层关系）
+
+```mermaid
+erDiagram
+  HABIT ||--o{ COMPLETION : "habitId"
+  HABIT {
+    string id PK
+    string name
+    int targetPerDay
+    string createdOn
+    string archivedOn
+  }
+  COMPLETION {
+    string habitId FK
+    string date PK
+    int count
+  }
+```
+
+- Store 顶层只允许 `version`、`habits`、`completions`。— 来源：`@src/domain/store.ts:142-156`
+- Completion 的逻辑复合键为 `(habitId, date)`。— 来源：`@src/domain/store.ts:198-233`
+- 当前业务源码无服务器数据库、迁移目录或事件总线；本节描述本地 JSON schema，不代表关系数据库。工作区虽有未提交 `supabase/config.toml`，但尚无 migration / schema，接入意图待确认。— 来源：`@supabase/config.toml`、2026-07-31 二次扫描
+
+### 4.4 共享配置
+
+| 配置 | 类型 / 值 | 影响模块 | 来源 |
+|---|---|---|---|
+| Store key | `xunji.store.v1` | Repository、跨标签同步 | `@src/data/repository.ts:11-18` |
+| Store version | `1` | 类型、校验、导入导出 | `@src/domain/types.ts:17-21`、`@src/domain/store.ts:148-156` |
+| 洞察范围 | `7 | 30 | 90` 天 | 洞察、趋势、共现 | `@src/domain/insightTypes.ts:3-12` |
+| 响应式断点 | `<1024px` 单列；`>=1024px` 桌面 | 应用壳与全部页面 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:69-81` |
+| PWA 更新 | `registerType: autoUpdate` | 应用壳 | `@vite.config.ts:7-12` |
+
+## 5. 扩展点（Where to plug in new things）
+
+| 你想加 | 加在哪 | 关键入口 / 验证 | 来源 |
+|---|---|---|---|
+| 新一级页面 | `src/pages/<Page>.tsx` | 在 `src/App.tsx` 和 `src/components/AppShell.tsx` 同步路由与双端导航；UI change 先补 Flow Kit `UI-DESIGN.md` | `@src/App.tsx:22-29`、`@src/components/AppShell.tsx:6-47`、`@AGENTS.md:91` |
+| 新 Store 命令 | `src/domain/store.ts` | 返回新 Store；复用 `validateStore`；由 `AppStore.commit` 持久化 | `@src/domain/store.ts:35-140`、`@src/app/AppStore.tsx:75-90` |
+| 新统计能力 | `src/domain/` | 纯函数输入 Store / 日期，先从 OpenSpec AC 派生领域测试 | `@src/domain/weeklyReport.ts:29-74`、`@AGENTS.md:103-108` |
+| 新持久化能力 | `src/data/repository.ts` | 不绕过完整校验、原子替换和失败保护 | `@src/data/repository.ts:16-59` |
+| 新复用交互 | `src/components/` | 页面组合组件；保持键盘、焦点和非颜色状态表达 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:128-134` |
+| 新测试 | `tests/domain|data|ui|e2e` | 单元/UI 使用 Vitest，浏览器流程使用 Playwright | `@package.json:7-14`、`@playwright.config.ts:3-19` |
+
+## 6. 容量 / 性能边界（Where things break）
+
+| 边界 | 当前上限 | 预警阈值 | 触发什么 | 来源 |
+|---|---|---|---|---|
+| `localStorage` 容量 | 待确认 / 取决于浏览器 | 待实测 | 数据量专项测试；必要时新 CHANGE 评估 IndexedDB 或其他持久化 | 当前代码没有容量保护，`@src/data/repository.ts:31-36` |
+| Store 校验复杂度 | 未基准测试 | 待实测 | 大量 Habit / Completion 时做性能基准，不先改数据结构 | `@src/domain/store.ts:142-235` |
+| 周报计算 | 单周、当前数据规模未基准测试 | 待实测 | 数据增长导致交互延迟时评估索引或预计算 | `@src/domain/weeklyReport.ts:9-74` |
+| 洞察 / 共现 | 最长 90 天；习惯对按两层循环生成 | 习惯数量或记录量导致可感知延迟时 | 先压测，再决定缓存、索引或 Worker | `@src/domain/coOccurrence.ts:99-122` |
+| 服务端容量 | 当前实现 N/A | N/A | 若确认接入 Supabase 或其他后端，必须先开新 CHANGE、补 schema 设计并重审 ADR-001 | `@openspec/changes/build-habit-review-mvp/design.md:24-33`、`@AGENTS.md:143-146` |
+
+## 7. 已知技术债 + 长期方向
+
+| 债 / 缺口 | 影响 | 优先级 | 触发条件 | 来源 |
+|---|---|---|---|---|
+| ADR-001～005 推翻成本尚无来源 | 架构重审时缺少迁移规模判断 | 中 | 首次准备推翻任一 ADR 前补齐 | 用户确认按“待确认”落盘 |
+| 浏览器存储与统计性能未基准测试 | 无法声明大数据量边界 | 低 | 实际数据增长或出现可感知卡顿 | 2026-07-31 扫描 |
+| `README.md` 部分相对链接在当前仓库不存在 | 新协作者无法从 README 打开真实规格路径 | 中 | 下一个文档维护 change | `@README.md:47-60` + 2026-07-31 路径核验 |
+| Flow Kit `UI-DESIGN.md` 尚未建立 | 未来 UI DEV 无法通过 R2.10 | 中 | 下一个用户可见 UI change 开始前 | `@AGENTS.md:91` + 2026-07-31 文件扫描 |
+| 长期依赖方向尚未升级为 hard rules | 新模块可能产生反向依赖 | 低 | 首次模块重组或出现依赖违例 | 用户确认按“当前事实”落盘 |
+| 未提交 Supabase 依赖和配置与 ADR-001 并存 | 容易把未确认试验误认为正式后端架构 | 待确认 | 用户决定采用或移除前；若采用必须新开 CHANGE 并重审 ADR-001 | `@package.json:16-35`、`@supabase/config.toml`、`@openspec/changes/build-habit-review-mvp/design.md:24-33` |
+
+## 8. 修订历史
+
+| 日期 | 修改人 | 概要 | 工作流 |
+|---|---|---|---|
+| 2026-07-31 | A-architect | 首次从 OpenSpec、UI 资产、评审证据与当前代码建立项目级架构 | A-architect 首跑 |
+
+> 后续只增量追加的架构事实走 A-evolve；涉及模块重组、删除旧 ADR 或推翻项目级决策时重跑 A-architect。
