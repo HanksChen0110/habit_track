@@ -222,6 +222,7 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await openToday(pageOtherAccount)
     const importedRow = pageOtherAccount.getByTestId('habit-row').filter({ hasText: isolatedHabitName })
     await expect(importedRow.getByText('1 / 1')).toBeVisible()
+    await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
 
     await openManage(pageOtherAccount)
     await backupInput.setInputFiles({
@@ -234,6 +235,7 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await pageOtherAccount.reload()
     await openToday(pageOtherAccount)
     await expect(importedRow.getByText('1 / 1')).toBeVisible()
+    await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
 
     await pageA.reload()
     await expect(pageA.getByText(habitName)).toBeVisible()
