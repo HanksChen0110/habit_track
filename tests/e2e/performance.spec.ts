@@ -5,6 +5,13 @@ const DAYS_PER_HABIT = 365
 const COMPLETION_COUNT = HABIT_COUNT * DAYS_PER_HABIT
 const SAMPLE_COUNT = 20
 const SAMPLE_LIMIT_MS = 1000
+const EXPECTED_PAGE_KEYS = [
+  'habits:range=0-9/*',
+  'completions:range=0-999/*',
+  'completions:range=1000-1999/*',
+  'completions:range=2000-2999/*',
+  'completions:range=3000-3649/*'
+]
 
 interface Account {
   email: string
@@ -15,6 +22,7 @@ interface Sample {
   durationMs: number
   habitRows: number
   completionRows: number
+  pageKeys: string[]
 }
 
 function createAccount(testInfo: TestInfo): Account {
@@ -80,20 +88,39 @@ async function importBenchmarkStore(page: Page): Promise<void> {
   await expect(page.getByTestId('habit-row')).toHaveCount(HABIT_COUNT)
 }
 
-function tableName(response: Response): 'habits' | 'completions' | null {
-  const pathname = new URL(response.url()).pathname
+type DataTable = 'habits' | 'completions'
+
+function tableName(url: string): DataTable | null {
+  const pathname = new URL(url).pathname
   if (pathname === '/rest/v1/habits') return 'habits'
   if (pathname === '/rest/v1/completions') return 'completions'
   return null
 }
 
-async function countRows(responses: Response[]): Promise<{ habitRows: number; completionRows: number }> {
+async function pageKey(response: Response): Promise<string | null> {
+  const table = tableName(response.request().url())
+  if (!table) return null
+  const contentRange = await response.headerValue('content-range')
+  if (!contentRange) throw new Error(`${table} 分页响应缺少 Content-Range 标识`)
+  return `${table}:range=${contentRange}`
+}
+
+async function countRows(responses: Response[]): Promise<{
+  habitRows: number
+  completionRows: number
+  pageKeys: string[]
+}> {
   let habitRows = 0
   let completionRows = 0
+  const pageKeys: string[] = []
 
   for (const response of responses) {
-    const table = tableName(response)
+    const request = response.request()
+    const table = tableName(request.url())
     if (!table) continue
+    const key = await pageKey(response)
+    if (!key) throw new Error('计入的分页响应必须有页面标识')
+    pageKeys.push(key)
     const body: unknown = await response.json()
     expect(Array.isArray(body), `${table} 分页响应必须是数组`).toBe(true)
     if (!Array.isArray(body)) throw new Error(`${table} 分页响应必须是数组`)
@@ -101,11 +128,12 @@ async function countRows(responses: Response[]): Promise<{ habitRows: number; co
     if (table === 'completions') completionRows += body.length
   }
 
-  return { habitRows, completionRows }
+  return { habitRows, completionRows, pageKeys }
 }
 
 async function measureRefresh(page: Page): Promise<Sample> {
   const responses: Response[] = []
+  const refreshRequests = new Set<Request>()
   let readStartedAt: number | undefined
   const onRequest = (request: Request) => {
     const url = new URL(request.url())
@@ -116,9 +144,12 @@ async function measureRefresh(page: Page): Promise<Sample> {
     ) {
       readStartedAt = performance.now()
     }
+    if (readStartedAt !== undefined && request.method() === 'GET' && tableName(request.url())) {
+      refreshRequests.add(request)
+    }
   }
   const onResponse = (response: Response) => {
-    if (readStartedAt !== undefined && tableName(response)) responses.push(response)
+    if (refreshRequests.has(response.request())) responses.push(response)
   }
 
   page.on('request', onRequest)
@@ -129,8 +160,8 @@ async function measureRefresh(page: Page): Promise<Sample> {
     await expect(page.locator('.summary-panel')).toBeVisible()
     expect(readStartedAt, '必须从 user_data_state 首个 GET 开始计时').toBeDefined()
     const durationMs = performance.now() - readStartedAt!
-    const { habitRows, completionRows } = await countRows(responses)
-    return { durationMs, habitRows, completionRows }
+    const { habitRows, completionRows, pageKeys } = await countRows(responses)
+    return { durationMs, habitRows, completionRows, pageKeys }
   } finally {
     page.off('request', onRequest)
     page.off('response', onResponse)
@@ -140,6 +171,18 @@ async function measureRefresh(page: Page): Promise<Sample> {
 function percentile95(values: number[]): number {
   const sorted = [...values].sort((left, right) => left - right)
   return sorted[Math.ceil(sorted.length * 0.95) - 1]
+}
+
+function expectExpectedPages(pageKeys: string[], sampleNumber: number): void {
+  const uniquePageKeys = new Set(pageKeys)
+  expect(
+    uniquePageKeys.size,
+    `第 ${sampleNumber} 次刷新不得重复计入分页响应`
+  ).toBe(pageKeys.length)
+  expect(
+    [...uniquePageKeys].sort(),
+    `第 ${sampleNumber} 次刷新必须只包含 1 个 habits 页和 4 个 completions 页`
+  ).toEqual([...EXPECTED_PAGE_KEYS].sort())
 }
 
 test('3650 records load completely within the local paginated-read baseline', async ({ page }, testInfo) => {
@@ -156,6 +199,7 @@ test('3650 records load completely within the local paginated-read baseline', as
     const sample = await measureRefresh(page)
     expect(sample.habitRows, `第 ${index + 1} 次刷新应完整读取 habits`).toBe(HABIT_COUNT)
     expect(sample.completionRows, `第 ${index + 1} 次刷新应完整读取 completions`).toBe(COMPLETION_COUNT)
+    expectExpectedPages(sample.pageKeys, index + 1)
     samples.push(sample)
   }
 
@@ -169,7 +213,8 @@ test('3650 records load completely within the local paginated-read baseline', as
   console.log(
     `performance baseline: samples=${durations.map((value) => value.toFixed(1)).join(',')}ms; ` +
       `p95=${p95.toFixed(1)}ms; complete=${samples.filter((sample) => sample.habitRows === HABIT_COUNT && sample.completionRows === COMPLETION_COUNT).length}/${SAMPLE_COUNT}; ` +
-      `under-${SAMPLE_LIMIT_MS}ms=${underLimit}/${SAMPLE_COUNT}`
+      `under-${SAMPLE_LIMIT_MS}ms=${underLimit}/${SAMPLE_COUNT}; ` +
+      `expected-pages=${EXPECTED_PAGE_KEYS.join('|')}`
   )
 
   expect(samples).toHaveLength(SAMPLE_COUNT)
