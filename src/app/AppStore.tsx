@@ -64,6 +64,21 @@ const READ_FAILURE = '暂时无法读取账号数据，请重试。'
 const INTEGRITY_FAILURE = '账号数据完整性校验失败，需要从完整备份恢复。'
 const RELOAD_FAILURE = '暂时无法重新读取账号数据，请重试。'
 const WRITE_FAILURE = '刚才的修改未保存，请重新操作。'
+const READ_TIMEOUT_MS = 4_000
+
+async function readWithTimeout(read: Promise<Store | null>): Promise<Store | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      read,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('account read timed out')), READ_TIMEOUT_MS)
+      })
+    ])
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
+}
 
 const AppStoreContext = createContext<AppStoreValue | null>(null)
 
@@ -137,7 +152,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       publishAccountState(loadingState(requestedSessionGeneration, userId))
 
       try {
-        const incoming = await repository.read()
+        const incoming = await readWithTimeout(repository.read())
         if (
           authUserIdRef.current !== userId ||
           sessionGenerationRef.current !== requestedSessionGeneration ||
@@ -221,7 +236,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     })
 
     try {
-      const incoming = await repository.read()
+      const incoming = await readWithTimeout(repository.read())
       if (
         authUserIdRef.current !== userId ||
         sessionGenerationRef.current !== requestedSessionGeneration ||

@@ -1,6 +1,8 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 
+const accountByPage = new WeakMap<Page, { email: string; password: string }>()
+
 async function createTestAccount(page: Page, testInfo: TestInfo) {
   const slug = testInfo.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 24)
   const email = `e2e-${slug}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}@example.test`
@@ -16,8 +18,13 @@ async function createTestAccount(page: Page, testInfo: TestInfo) {
   await page.getByLabel('密码').fill(password)
   await page.getByRole('button', { name: '创建账号', exact: true }).click()
   await expect(page.getByRole('heading', { name: '让行动留下清晰的轨迹。' })).toBeVisible()
+  accountByPage.set(page, { email, password })
+}
 
-  return email
+function currentAccount(page: Page) {
+  const account = accountByPage.get(page)
+  if (!account) throw new Error('test account was not initialized')
+  return account
 }
 
 test.beforeEach(async ({ page }, testInfo) => {
@@ -25,9 +32,10 @@ test.beforeEach(async ({ page }, testInfo) => {
 })
 
 test('empty start, create, record and refresh recovery', async ({ page }) => {
+  const { email } = currentAccount(page)
   await page.getByRole('button', { name: '开始记录' }).click()
   await expect(page.getByText('本机账号数据')).toBeVisible()
-  await expect(page.getByLabel(/当前账号：e2e-/)).toBeVisible()
+  await expect(page.getByLabel(`当前账号：${email}`)).toBeVisible()
   await page.getByRole('button', { name: '创建习惯', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '创建习惯' })
   await expect(dialog.getByRole('button', { name: '关闭创建习惯' })).toBeFocused()
@@ -50,6 +58,28 @@ test('empty start, create, record and refresh recovery', async ({ page }) => {
   await page.reload()
   await expect(page.getByTestId('habit-row').filter({ hasText: '阅读' }).getByText('1 / 2')).toBeVisible()
   await expect(page.getByTestId('habit-row').filter({ hasText: '喝水' }).getByText('1 / 1')).toBeVisible()
+})
+
+test('wrong login stays gated and sign-out then re-login restores the account Store', async ({ page }) => {
+  const { email, password } = currentAccount(page)
+  await page.getByRole('button', { name: '载入示例' }).click()
+  await expect(page.getByText('阅读 30 分钟')).toBeVisible()
+
+  await page.getByRole('button', { name: '退出账号' }).click()
+  await expect(page.getByRole('heading', { name: '登录循迹' })).toBeVisible()
+  await expect(page.getByText('阅读 30 分钟')).toHaveCount(0)
+
+  await page.getByLabel('邮箱').fill(email)
+  await page.getByLabel('密码').fill(`${password}-wrong`)
+  await page.getByRole('button', { name: '登录循迹' }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '登录循迹' })).toBeVisible()
+  await expect(page.getByText('阅读 30 分钟')).toHaveCount(0)
+
+  await page.getByLabel('密码').fill(password)
+  await page.getByRole('button', { name: '登录循迹' }).click()
+  await expect(page.getByLabel(`当前账号：${email}`)).toBeVisible()
+  await expect(page.getByText('阅读 30 分钟')).toBeVisible()
 })
 
 test('demo, backfill, weekly history and archive remain usable', async ({ page }) => {
@@ -238,6 +268,7 @@ test('a backend write failure leaves the visible and persisted count unchanged',
   const minus = row.getByRole('button', { name: '阅读 30 分钟，减少一次' })
   await (await plus.isEnabled() ? plus : minus).click()
 
+  expect(blocked).toBe(true)
   await expect(row.getByText('未保存，请重试')).toBeVisible()
   await expect(row.locator('.stepper strong')).toHaveText(before ?? '')
   await page.unroute('**/rest/v1/completions*')
@@ -391,7 +422,9 @@ test('installed app shell remains available offline', async ({ page, context }) 
   await context.setOffline(true)
   await page.reload()
   await expect(page.getByText('循迹', { exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /正在读取账号数据|暂时无法读取账号数据/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '暂时无法读取账号数据' })).toBeVisible({ timeout: 7_000 })
   await expect(page.getByText('阅读 30 分钟')).toHaveCount(0)
   await context.setOffline(false)
+  await page.getByRole('button', { name: '重新读取' }).click()
+  await expect(page.getByText('阅读 30 分钟')).toBeVisible()
 })

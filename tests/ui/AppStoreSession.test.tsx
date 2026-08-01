@@ -173,6 +173,27 @@ describe('AppStore account session reads', () => {
     expect(result.current.error).not.toContain('private')
   })
 
+  it('leaves loading for the safe read-failure gate when an account read never settles', async () => {
+    vi.useFakeTimers()
+    try {
+      authenticate('user-a')
+      repositoryMock.read.mockReturnValueOnce(new Promise<Store | null>(() => undefined))
+
+      const { result } = renderHook(() => useAppStore(), { wrapper })
+      expect(result.current.status).toBe('loading')
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000)
+      })
+
+      expect(result.current.status).toBe('error')
+      expect(result.current.store).toBeNull()
+      expect(result.current.error).toBe('暂时无法读取账号数据，请重试。')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('classifies invalid account Store data separately from a backend read failure', async () => {
     authenticate('user-a')
     repositoryMock.read.mockRejectedValueOnce(
