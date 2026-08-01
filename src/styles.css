@@ -497,6 +497,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .week-overview { margin-top: 26px; }
 }
 
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .desktop-account .local-badge { display: none; }
+  .account-email { max-width: 120px; }
+}
+
 @media (max-width: 640px) {
   .app-frame { padding: 9px 9px 90px; }
   .topbar { margin-bottom: 9px; border-radius: 15px; }
@@ -548,6 +553,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
+  }
+  .account-panel, .page-enter, .modal, .save-toast {
+    animation: none !important;
+    transform: none !important;
   }
 }
 

@@ -1,16 +1,36 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 
-test.beforeEach(async ({ page }) => {
+async function createTestAccount(page: Page, testInfo: TestInfo) {
+  const slug = testInfo.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 24)
+  const email = `e2e-${slug}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}@example.test`
+  const password = `E2e-${crypto.randomUUID()}-9aA!`
+
   await page.goto('/')
   await page.evaluate(() => localStorage.clear())
   await page.reload()
+
+  await page.getByRole('button', { name: '创建账号' }).click()
+  await expect(page.getByRole('heading', { name: '创建账号' })).toBeVisible()
+  await page.getByLabel('邮箱').fill(email)
+  await page.getByLabel('密码').fill(password)
+  await page.getByRole('button', { name: '创建账号', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '让行动留下清晰的轨迹。' })).toBeVisible()
+
+  return email
+}
+
+test.beforeEach(async ({ page }, testInfo) => {
+  await createTestAccount(page, testInfo)
 })
 
 test('empty start, create, record and refresh recovery', async ({ page }) => {
   await page.getByRole('button', { name: '开始记录' }).click()
+  await expect(page.getByText('本机账号数据')).toBeVisible()
+  await expect(page.getByLabel(/当前账号：e2e-/)).toBeVisible()
   await page.getByRole('button', { name: '创建习惯', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '创建习惯' })
+  await expect(dialog.getByRole('button', { name: '关闭创建习惯' })).toBeFocused()
   await dialog.getByLabel('习惯名称').fill('阅读')
   await dialog.getByLabel('每日目标').fill('2')
   await dialog.getByRole('button', { name: '保存习惯' }).click()
@@ -23,6 +43,7 @@ test('empty start, create, record and refresh recovery', async ({ page }) => {
   const row = page.getByTestId('habit-row').filter({ hasText: '阅读' })
   await row.getByRole('button', { name: '阅读，增加一次' }).click()
   await expect(row.getByText('1 / 2')).toBeVisible()
+  await expect(row.getByText('已保存')).toHaveAttribute('aria-live', 'polite')
   const oneTargetRow = page.getByTestId('habit-row').filter({ hasText: '喝水' })
   await oneTargetRow.getByRole('button', { name: '喝水，增加一次' }).click()
   await expect(oneTargetRow.getByText('1 / 1')).toBeVisible()
@@ -199,14 +220,18 @@ test('exported JSON restores the complete pre-change store', async ({ page }) =>
   await expect(page.getByText(/归档于.*历史数据保留/)).toHaveCount(0)
 })
 
-test('a local write failure leaves the visible and persisted count unchanged', async ({ page }) => {
+test('a backend write failure leaves the visible and persisted count unchanged', async ({ page }) => {
   await page.getByRole('button', { name: '载入示例' }).click()
   const row = page.getByTestId('habit-row').filter({ hasText: '阅读 30 分钟' })
   const before = await row.locator('.stepper strong').textContent()
-  await page.evaluate(() => {
-    Storage.prototype.setItem = () => {
-      throw new Error('storage unavailable')
+  let blocked = false
+  await page.route('**/rest/v1/completions*', async (route) => {
+    if (!blocked && route.request().method() !== 'GET') {
+      blocked = true
+      await route.abort('failed')
+      return
     }
+    await route.continue()
   })
 
   const plus = row.getByRole('button', { name: '阅读 30 分钟，增加一次' })
@@ -215,6 +240,43 @@ test('a local write failure leaves the visible and persisted count unchanged', a
 
   await expect(row.getByText('未保存，请重试')).toBeVisible()
   await expect(row.locator('.stepper strong')).toHaveText(before ?? '')
+  await page.unroute('**/rest/v1/completions*')
+  await page.reload()
+  await expect(page.getByTestId('habit-row').filter({ hasText: '阅读 30 分钟' }).locator('.stepper strong')).toHaveText(before ?? '')
+})
+
+test('account controls, modal focus and reduced motion remain accessible', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.getByRole('button', { name: '开始记录' }).click()
+
+  const signOut = page.getByRole('button', { name: '退出账号' })
+  await expect(signOut).toBeVisible()
+  const signOutBox = await signOut.boundingBox()
+  expect(signOutBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+
+  const createButton = page.getByRole('button', { name: '创建习惯', exact: true })
+  await createButton.focus()
+  await createButton.press('Enter')
+  const dialog = page.getByRole('dialog', { name: '创建习惯' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '关闭创建习惯' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(createButton).toBeFocused()
+
+  const motion = await page.locator('.page-enter').first().evaluate((element) => {
+    const style = getComputedStyle(element)
+    return {
+      animationName: style.animationName,
+      animationDuration: style.animationDuration,
+      transform: style.transform,
+      transitionDuration: style.transitionDuration
+    }
+  })
+  expect(motion.animationName).toBe('none')
+  expect(motion.transform).toBe('none')
+  expect(Number.parseFloat(motion.animationDuration)).toBeLessThanOrEqual(0.001)
+  expect(Number.parseFloat(motion.transitionDuration)).toBeLessThanOrEqual(0.001)
 })
 
 test('demo insights support range switching, co-occurrence drill-down and manage focus', async ({ page }) => {
@@ -230,9 +292,9 @@ test('demo insights support range switching, co-occurrence drill-down and manage
   await expect(page.getByTestId('insight-trend-chart')).toHaveAttribute('data-range', '90')
 
   await page.getByRole('button', { name: '30 天', exact: true }).click()
-  const pair = page.getByRole('button', { name: /阅读 30 分钟与拉伸与训练，同时达标/ }).first()
+  const pair = page.getByRole('button', { name: /拉伸与训练与阅读 30 分钟，同时达标/ }).first()
   await pair.click()
-  const detail = page.getByRole('dialog', { name: /阅读 30 分钟与拉伸与训练/ })
+  const detail = page.getByRole('dialog', { name: /拉伸与训练与阅读 30 分钟/ })
   await expect(detail.getByText('伴随关系不代表因果')).toBeVisible()
   await detail.getByRole('button', { name: /关闭/ }).click()
 
@@ -246,13 +308,12 @@ test('target viewports have no horizontal overflow and expose the correct naviga
 }, testInfo) => {
   const widths = [320, 390, 768, 1024, 1440]
   mkdirSync('output/playwright', { recursive: true })
+  await page.getByRole('button', { name: '载入示例' }).click()
 
   for (const width of widths) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto('/')
-    if (await page.getByRole('button', { name: '载入示例' }).isVisible()) {
-      await page.getByRole('button', { name: '载入示例' }).click()
-    }
+    await expect(page.getByRole('link', { name: '今天', exact: true }).filter({ visible: true })).toBeVisible()
 
     if (width < 1024) {
       await expect(page.locator('.mobile-nav')).toBeVisible()
@@ -329,6 +390,8 @@ test('installed app shell remains available offline', async ({ page, context }) 
   await page.reload()
   await context.setOffline(true)
   await page.reload()
-  await expect(page.getByRole('heading', { name: /月.*日/ })).toBeVisible()
+  await expect(page.getByText('循迹', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /正在读取账号数据|暂时无法读取账号数据/ })).toBeVisible()
+  await expect(page.getByText('阅读 30 分钟')).toHaveCount(0)
   await context.setOffline(false)
 })
