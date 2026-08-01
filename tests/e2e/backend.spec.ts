@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 
 interface Account {
@@ -38,7 +38,12 @@ async function startEmptyStore(page: Page): Promise<void> {
 }
 
 async function createHabit(page: Page, name: string, target = '3'): Promise<void> {
-  await page.getByRole('button', { name: '创建习惯', exact: true }).click()
+  const emptyStateCreate = page.getByRole('button', { name: '创建习惯', exact: true })
+  if (await emptyStateCreate.isVisible()) {
+    await emptyStateCreate.click()
+  } else {
+    await page.getByRole('button', { name: '快速创建习惯' }).click()
+  }
   const dialog = page.getByRole('dialog', { name: '创建习惯' })
   await dialog.getByLabel('习惯名称').fill(name)
   await dialog.getByLabel('每日目标').fill(target)
@@ -64,9 +69,14 @@ async function localDate(page: Page): Promise<string> {
   })
 }
 
+async function closeContext(context: BrowserContext | undefined): Promise<void> {
+  if (context) await context.close()
+}
+
 test('two isolated browser contexts persist one account while keeping a colliding second account separate', async ({
   browser
 }, testInfo) => {
+  test.setTimeout(90_000)
   const accountA = createAccount(testInfo, 'a')
   const accountB = createAccount(testInfo, 'b')
   const legacyStore = JSON.stringify({
@@ -75,15 +85,18 @@ test('two isolated browser contexts persist one account while keeping a collidin
     completions: []
   })
   const habitName = '跨上下文习惯'
+  const archivedHabitName = '导出归档习惯'
   const isolatedHabitName = '隔离账号同键习惯'
   const replacedHabitName = '将被完整替换的习惯'
-  const contextA = await browser.newContext()
-  const contextSameAccount = await browser.newContext()
-  const contextOtherAccount = await browser.newContext()
+  let contextA: BrowserContext | undefined
+  let contextSameAccount: BrowserContext | undefined
+  let contextOtherAccount: BrowserContext | undefined
 
   try {
+    contextA = await browser.newContext()
     const pageA = await contextA.newPage()
     await pageA.goto('/')
+    const today = await localDate(pageA)
     await pageA.evaluate((value) => localStorage.setItem('xunji.store.v1', value), legacyStore)
     await signUp(pageA, accountA)
     await startEmptyStore(pageA)
@@ -91,7 +104,12 @@ test('two isolated browser contexts persist one account while keeping a collidin
     const rowA = pageA.getByTestId('habit-row').filter({ hasText: habitName })
     await rowA.getByRole('button', { name: `${habitName}，增加一次` }).click()
     await expect(rowA.getByText('1 / 3')).toBeVisible()
+    await createHabit(pageA, archivedHabitName, '2')
+    const archivedRowA = pageA.getByTestId('habit-row').filter({ hasText: archivedHabitName })
+    await archivedRowA.getByRole('button', { name: `${archivedHabitName}，增加一次` }).click()
+    await expect(archivedRowA.getByText('1 / 2')).toBeVisible()
 
+    contextSameAccount = await browser.newContext()
     const pageSameAccount = await contextSameAccount.newPage()
     await signIn(pageSameAccount, accountA)
     const rowSameAccount = pageSameAccount.getByTestId('habit-row').filter({ hasText: habitName })
@@ -101,10 +119,24 @@ test('two isolated browser contexts persist one account while keeping a collidin
 
     await pageA.reload()
     await expect(rowA.getByText('2 / 3')).toBeVisible()
+    await openManage(pageA)
+    await pageA.getByRole('button', { name: `归档${archivedHabitName}` }).click()
+    await pageA.getByRole('button', { name: '确认归档' }).click()
+    await expect(pageA.getByText(/归档于.*历史数据保留/)).toBeVisible()
     await pageA.getByRole('button', { name: '退出账号' }).click()
     await expect(pageA.getByRole('heading', { name: '登录循迹' })).toBeVisible()
     await signIn(pageA, accountA)
     await expect(rowA.getByText('2 / 3')).toBeVisible()
+
+    contextOtherAccount = await browser.newContext()
+    const pageOtherAccount = await contextOtherAccount.newPage()
+    await signUp(pageOtherAccount, accountB)
+    await expect(pageOtherAccount.getByText(habitName)).toHaveCount(0)
+    await expect(pageOtherAccount.getByText(archivedHabitName)).toHaveCount(0)
+    await startEmptyStore(pageOtherAccount)
+    await expect(pageOtherAccount.getByText(habitName)).toHaveCount(0)
+    await expect(pageOtherAccount.getByText(archivedHabitName)).toHaveCount(0)
+    await createHabit(pageOtherAccount, replacedHabitName)
 
     await openManage(pageA)
     const downloadPromise = pageA.waitForEvent('download')
@@ -118,11 +150,26 @@ test('two isolated browser contexts persist one account while keeping a collidin
       completions: Array<{ habitId: string; date: string; count: number }>
     }
     const primaryHabit = exportedStore.habits.find((habit) => habit.name === habitName)
-    expect(exportedStore.version).toBe(1)
     expect(primaryHabit).toBeDefined()
-    expect(exportedStore.completions).toEqual([
-      { habitId: primaryHabit!.id, date: await localDate(pageA), count: 2 }
-    ])
+    const archivedHabit = exportedStore.habits.find((habit) => habit.name === archivedHabitName)
+    expect(archivedHabit).toBeDefined()
+    expect({
+      version: exportedStore.version,
+      habits: exportedStore.habits.map(({ id, ...habit }) => habit).sort((left, right) => left.name.localeCompare(right.name)),
+      completions: exportedStore.completions
+        .map((completion) => ({ ...completion, habitName: exportedStore.habits.find((habit) => habit.id === completion.habitId)?.name }))
+        .sort((left, right) => left.habitName!.localeCompare(right.habitName!))
+    }).toEqual({
+      version: 1,
+      habits: [
+        { name: archivedHabitName, targetPerDay: 2, createdOn: today, archivedOn: today },
+        { name: habitName, targetPerDay: 3, createdOn: today, archivedOn: null }
+      ],
+      completions: [
+        { habitId: archivedHabit!.id, date: today, count: 1, habitName: archivedHabitName },
+        { habitId: primaryHabit!.id, date: today, count: 2, habitName }
+      ]
+    })
 
     await openToday(pageA)
     let blockedWrite = false
@@ -147,12 +194,7 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await expect(pageA.getByText('旧本地数据不得显示')).toHaveCount(0)
     await expect(pageA.evaluate(() => localStorage.getItem('xunji.store.v1'))).resolves.toBe(legacyStore)
 
-    const pageOtherAccount = await contextOtherAccount.newPage()
-    await signUp(pageOtherAccount, accountB)
-    await startEmptyStore(pageOtherAccount)
-    await createHabit(pageOtherAccount, replacedHabitName)
     await openManage(pageOtherAccount)
-    const today = await localDate(pageOtherAccount)
     const importedStore = {
       version: 1,
       habits: [{
@@ -176,6 +218,9 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await confirmImport.getByRole('button', { name: '完整替换' }).click()
     await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
     await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
+    await pageOtherAccount.reload()
+    await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
+    await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
 
     await backupInput.setInputFiles({
       name: 'invalid-backup.json',
@@ -184,16 +229,19 @@ test('two isolated browser contexts persist one account while keeping a collidin
     })
     await expect(pageOtherAccount.getByRole('alert')).toBeVisible()
     await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
+    await pageOtherAccount.reload()
+    await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
+    await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
 
     await pageA.reload()
     await expect(pageA.getByText(habitName)).toBeVisible()
     await expect(pageA.getByText(isolatedHabitName)).toHaveCount(0)
     await expect(rowA.getByText('2 / 3')).toBeVisible()
   } finally {
-    await Promise.all([
-      contextOtherAccount.close(),
-      contextSameAccount.close(),
-      contextA.close()
+    await Promise.allSettled([
+      closeContext(contextOtherAccount),
+      closeContext(contextSameAccount),
+      closeContext(contextA)
     ])
   }
 })
