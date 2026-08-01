@@ -318,6 +318,7 @@ test('account controls, modal focus and reduced motion remain accessible', async
   expect(toastBox).not.toBeNull()
   expect(viewport).not.toBeNull()
   expect(Math.abs((toastBox!.x + toastBox!.width / 2) - viewport!.width / 2)).toBeLessThan(1)
+  await expect(toast).toHaveCount(0, { timeout: 4_000 })
 })
 
 test('demo insights support range switching, co-occurrence drill-down and manage focus', async ({ page }) => {

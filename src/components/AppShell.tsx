@@ -12,6 +12,8 @@ const navigation = [
   { to: '/manage', label: '管理', icon: Settings2 }
 ]
 
+const NOTICE_DURATION_MS = 2_600
+
 export function AppShell() {
   const { status, notice, error, clearMessages } = useAppStore()
   const { user, signOut } = useAuth()
@@ -25,6 +27,12 @@ export function AppShell() {
   useEffect(() => {
     if (!error) setDismissedStoreError('')
   }, [error])
+
+  useEffect(() => {
+    if (!notice) return
+    const timeoutId = window.setTimeout(clearMessages, NOTICE_DURATION_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [clearMessages, notice])
 
   async function exitAccount() {
     if (signOutInFlight.current) return
@@ -114,7 +122,6 @@ export function AppShell() {
           role="status"
           aria-label="保存结果"
           aria-live="polite"
-          onAnimationEnd={clearMessages}
         >
           {notice}
         </div>

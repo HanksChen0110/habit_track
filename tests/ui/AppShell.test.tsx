@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -150,6 +150,23 @@ describe('AppShell', () => {
     expect(toast).toHaveTextContent('已保存今天的记录')
 
     expect(toast).toHaveClass('toast')
+  })
+
+  it('clears a successful notice after its fixed lifetime without an animation event', () => {
+    vi.useFakeTimers()
+    try {
+      mocks.appStore.notice = '已保存今天的记录'
+      renderShell()
+
+      expect(screen.getByRole('status', { name: '保存结果' })).toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(2_599))
+      expect(mocks.appStore.clearMessages).not.toHaveBeenCalled()
+
+      act(() => vi.advanceTimersByTime(1))
+      expect(mocks.appStore.clearMessages).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps write failures visible until close and reveals a changed error', async () => {
