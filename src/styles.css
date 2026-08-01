@@ -554,9 +554,13 @@ button:focus-visible, a:focus-visible, input:focus-visible {
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
   }
-  .account-panel, .page-enter, .modal, .toast {
+  .account-panel, .page-enter, .modal {
     animation: none !important;
     transform: none !important;
+  }
+  .toast {
+    animation: none !important;
+    transform: translateX(-50%) !important;
   }
 }
 

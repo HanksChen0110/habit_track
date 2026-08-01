@@ -308,6 +308,16 @@ test('account controls, modal focus and reduced motion remain accessible', async
   expect(motion.transform).toBe('none')
   expect(Number.parseFloat(motion.animationDuration)).toBeLessThanOrEqual(0.001)
   expect(Number.parseFloat(motion.transitionDuration)).toBeLessThanOrEqual(0.001)
+
+  await createButton.click()
+  await page.getByLabel('习惯名称').fill('减弱动态测试')
+  await page.getByRole('button', { name: '保存习惯' }).click()
+  const toast = page.locator('.toast')
+  await expect(toast).toBeVisible()
+  const [toastBox, viewport] = await Promise.all([toast.boundingBox(), page.viewportSize()])
+  expect(toastBox).not.toBeNull()
+  expect(viewport).not.toBeNull()
+  expect(Math.abs((toastBox!.x + toastBox!.width / 2) - viewport!.width / 2)).toBeLessThan(1)
 })
 
 test('demo insights support range switching, co-occurrence drill-down and manage focus', async ({ page }) => {
