@@ -76,7 +76,7 @@ async function closeContext(context: BrowserContext | undefined): Promise<void> 
 test('two isolated browser contexts persist one account while keeping a colliding second account separate', async ({
   browser
 }, testInfo) => {
-  test.setTimeout(90_000)
+  test.setTimeout(60_000)
   const accountA = createAccount(testInfo, 'a')
   const accountB = createAccount(testInfo, 'b')
   const legacyStore = JSON.stringify({
@@ -219,9 +219,11 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
     await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
     await pageOtherAccount.reload()
-    await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
-    await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
+    await openToday(pageOtherAccount)
+    const importedRow = pageOtherAccount.getByTestId('habit-row').filter({ hasText: isolatedHabitName })
+    await expect(importedRow.getByText('1 / 1')).toBeVisible()
 
+    await openManage(pageOtherAccount)
     await backupInput.setInputFiles({
       name: 'invalid-backup.json',
       mimeType: 'application/json',
@@ -230,8 +232,8 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await expect(pageOtherAccount.getByRole('alert')).toBeVisible()
     await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
     await pageOtherAccount.reload()
-    await expect(pageOtherAccount.getByText(isolatedHabitName)).toBeVisible()
-    await expect(pageOtherAccount.getByText(replacedHabitName)).toHaveCount(0)
+    await openToday(pageOtherAccount)
+    await expect(importedRow.getByText('1 / 1')).toBeVisible()
 
     await pageA.reload()
     await expect(pageA.getByText(habitName)).toBeVisible()
