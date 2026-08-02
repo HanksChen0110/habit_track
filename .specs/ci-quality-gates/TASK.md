@@ -21,7 +21,7 @@ Wave 4:            T05      (depends on T04)
 ## 任务清单
 
 ```xml
-<task id="T01" parallel="true" status="in_progress">
+<task id="T01" parallel="true" status="done">
   <name>建立 Oxlint 基线与本地 lint 命令</name>
   <read_files>
     package.json
@@ -41,7 +41,7 @@ Wave 4:            T05      (depends on T04)
     按 D1 添加 Oxlint，并新增 `pnpm lint`：检查 src 与 tests、将 warnings 视为失败、启用 React 规则、关闭 Unicorn 默认插件。不得引入可绕过失败的脚本或不兼容的 TypeScript parser。
   </action>
   <verify>pnpm exec oxlint --version</verify>
-  <done>AC-1 的 lint 命令存在，并实际覆盖 TypeScript / React 文件；首次规则问题交由 T03 修复。</done>
+  <done>AC-1 的 lint 命令存在，并实际覆盖 TypeScript / React 文件；首次规则问题交由 T03 修复。（2026-08-02 14:06）</done>
   <depends_on></depends_on>
 </task>
 
