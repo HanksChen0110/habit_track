@@ -1,44 +1,9 @@
-# 习惯追踪仪表盘项目约定
+# SYSTEM — 永久注入版
 
-> 本文件与 `CLAUDE.md` 内容相同。Claude Code 读 `CLAUDE.md`，Codex 读 `AGENTS.md`。
-> 修改任意一份后必须同步另一份，用 `diff CLAUDE.md AGENTS.md` 确认一致。
+> 把这个文件的内容复制进你的 IDE 全局规则文件（`.windsurfrules` / `.cursorrules` / `CLAUDE.md` / `.aider.conf.yml`），IDE 会自动注入每次会话。
+> 注入后你只需要 `@flow-kit/prompts/<n>-*.md` 引用当前阶段，不用再 `@METHODOLOGY` 和 `@RULES`。
 
-## 目标与产品边界
-
-这是一个个人自用、本地优先的习惯记录与每周执行复盘工具。产品面向单个个人用户；本地开发使用 Supabase CLI Auth/Data API/Postgres，生产边界为 Vercel 静态前端 + Supabase 云端后端。
-
-核心闭环：创建每日目标习惯、记录完成量、查看每周整体执行率与日期规律、导出或导入自己的数据。
-
-产品基线以 `openspec/changes/build-habit-review-mvp/` 为准；已确认的账号后端与后续变更以 `.specs/archive/`、`.specs/CONTEXT.md` 和 `.specs/ARCHITECTURE.md` 为准。不扩展多人协作、提醒、连续天数、长期热力图、社交或 AI 建议。
-
-## 结构
-
-- `docs/`：历史产品设计、实施计划和使用说明；其中标注为"已替代"的文档不得作为实现依据。
-- `openspec/changes/build-habit-review-mvp/`：当前 MVP 的提案、设计、能力规格、任务与评审记录。
-- `src/`、`tests/`：应用源码与测试，遵循与其相邻的项目约定。
-
-## 实现偏好
-
-- 选择依赖少、可本地运行的 Web 技术栈。
-- 数据结构优先保证可读、可导出、可恢复；所有日期使用本地日历日（`YYYY-MM-DD`）。
-- 不为尚未确认的多人协作、跨账号共享或复杂计划规则预留抽象。
-
-## 修改原则
-
-- 只实现已确认范围；新增范围先更新设计文档并取得确认。
-- 业务数据通过既有 Supabase Repository 写入 Postgres，账号隔离由 RLS 保证；页面和组件不得绕过数据层直接访问 Supabase。
-- 修改后必须运行与改动相关的检查或测试，并报告结果。
-- 不提交密钥、令牌或真实个人数据。
-
-## 验证
-
-- 实现行为必须有自动化测试或可重复的手动验证步骤。
-- 发布前至少验证：创建习惯、当天打卡、最近 7 天纠正、周报统计、导入导出、刷新后数据保留。
-
-## 提交与高风险操作
-
-- 提交前先展示变更与验证结果。
-- 删除文件、修改密钥或 CI/CD、数据库迁移、推送远端等操作必须先获得用户明确授权。
+---
 
 ## 你正在协作一个使用 flow-kit 流程的项目
 
@@ -135,28 +100,3 @@
 ---
 
 > 完整方法论与机制详见 `@flow-kit/METHODOLOGY.md`，本文件是其精简注入版。
-
-## 工具授权边界
-
-### 需要人工确认才能执行
-- git push、强制推送、分支删除
-- 删除、移动或归档文件与目录
-- 修改 .env、密钥、CI 配置
-- 新建或修改 schema、migration，执行 `supabase db reset`
-- 安装新的全局依赖
-- Docker Desktop 安装或系统级配置变更
-
-### 可自主执行
-- 本地测试、构建、lint（静态代码检查）、typecheck（类型检查）
-- 项目内文件读写（受 write_files 边界约束）
-- git add、commit（在已绑定的分支上）
-- `supabase status`、只读查询和不改变 schema 的本地验证
-
-### 审计
-高风险操作每次执行后，在 harness-tool-audit.md 追加一行：
-时间 | 工具 | 操作 | 是否需人批 | 结果 | 对应 TASK.md 条目
-
-| 分级     | 新增项                                                             |
-| ------ | --------------------------------------------------------------- |
-| 需要人工确认 | 生产库任何 schema 变更、任何 delete、任何 `db push`、Vercel 生产环境变量修改、读取真实用户数据 |
-| 可自主执行  | 本地测试与构建、开发/预发布环境的 schema 和 policy 只读查询                          |

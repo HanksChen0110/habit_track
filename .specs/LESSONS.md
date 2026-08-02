@@ -7,6 +7,7 @@
 - L-001：PostgREST 省略所有权列时，RLS 不会自动替 insert 补值
 - L-002：不要用 CSS animationend 管理业务状态生命周期
 - L-003：Supabase credential Promise 与 auth event 的顺序不是单一权威
+- L-004：UI 触发异步持久化后不要立刻用刷新验证无关行为
 
 ## 条目
 
@@ -78,3 +79,26 @@ React effect/timer 管理状态生命周期并在新值/卸载时 cleanup；CSS 
 
 **何时可重新评估**
 Supabase Auth 明确提供原子账号切换 API，或应用禁止已登录状态下发起其他账号 credential 请求时。
+
+### L-004 · [playwright, e2e, persistence, race] UI 触发异步持久化后不要立刻用刷新验证无关行为
+
+- **首发**：mobile-performance-green · T02 · 2026-08-02
+- **上次复核**：2026-08-02
+- **适用栈**：React / Playwright / 异步后端持久化
+- **状态**：active
+- **关键词**：Playwright click page.goto reload async persistence demo seed landing race flaky
+
+**问题场景**
+E2E 点击会异步写入后端的“载入示例”后，响应式布局用例立即 `page.goto('/')`，但该用例实际只需要切换视口和站内导航。
+
+**当时尝试的方案**
+每切换一个宽度都强制刷新，以为这样能得到更“干净”的页面状态。
+
+**为什么不行**
+用户可见页面已经切换，但持久化 Promise 尚未结束；并发负载下刷新读到空 Store，回到体验选择页。隔离时通过、全套时 21/22，形成典型负载相关假阴性。
+
+**当前推荐做法**
+先问刷新是不是 AC 的必要动作：不是就只调整视口并走站内导航；确实要验证持久化时，等待可观察的保存完成或服务端回读证据后再刷新。见 `@.specs/archive/2026-08-02-mobile-performance-green/T02-SUMMARY.md`。
+
+**何时可重新评估**
+相关 UI action 明确定义为等待后端持久化完成才 resolve，且有回归测试证明刷新不会抢跑时。

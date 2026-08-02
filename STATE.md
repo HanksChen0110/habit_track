@@ -8,8 +8,8 @@
 ## 当前位置
 
 - **活跃 Flow Kit Change**：无
-- **当前阶段**：CHANGE（等待下一项）
-- **当前 Task**：无；`local-postgres-backend` 已于 2026-08-01 归档
+- **当前阶段**：ARCHIVE（completed）
+- **当前 Task**：`mobile-performance-green` 已通过 UAT，归档至 `.specs/archive/2026-08-02-mobile-performance-green/`
 - **中断任务**：无
 - **现有 OpenSpec 状态**：
   - `build-habit-review-mvp`：文件仍位于 `openspec/changes/`，`tasks.md` 已全部勾选；是当前 MVP 实施来源，不映射为 Flow Kit 活跃 change。— 来源：`@AGENTS.md:12-18`、`@openspec/changes/build-habit-review-mvp/tasks.md:1-48`
@@ -24,19 +24,24 @@
 | 项 | 类型 | 详情 | 待谁 | 来源 |
 |---|---|---|---|---|
 | OpenSpec 是否归档 | 流程 | 两个 OpenSpec change 已完成任务但仍在 `openspec/changes/`；本次不移动、不归档 | 用户 | 2026-07-31 文件扫描 |
-| 性能余量 | 非阻塞 | 10 Habit + 3650 Completion 的最终集成轮为 19/20 ≤1s、P95 931.7ms，已达标但余量有限 | 后续容量 change | `@.specs/archive/2026-08-01-local-postgres-backend/UAT.md` |
+| 性能基线可移植性 | 非阻塞 | 当前机器 desktop/mobile P95 为 440.0/333.9ms；尚未建立跨机器或 CI 历史趋势 | 后续容量 change | `@.specs/archive/2026-08-02-mobile-performance-green/UAT.md` |
 | 依赖告警 | 已知接受 | React Router 7.18.1 有 1 个仅影响 unstable RSC API 的 high；当前 RSC 调用面为 0 | 引入 RSC 前必须处理 | `@.specs/archive/2026-08-01-local-postgres-backend/TEST.md#31-依赖漏洞` |
 
-## 工作区观察（初始化前已存在）
+## 工作区与交付边界
 
-- 初始化时分支为 `main`、HEAD 为 `2b369e0`；当前保留在 `codex/local-postgres-backend`，实现 HEAD 为 `8c4906b`，未 push、未合并 main。— 来源：2026-08-01 `git branch` / `git log`
-- 已有未提交修改：`AGENTS.md`、`CLAUDE.md`、`README.md`、`openspec/changes/build-habit-review-mvp/tasks.md`。
-- 已有未跟踪目录：`flow-kit/`、`review_test/`。
-- 上述内容在本次上下文初始化前已存在，本次没有覆盖、清理、提交或归属它们。— 来源：2026-07-31 初始化前后 `git status --short`
-- 本地后端运行依赖、Supabase 配置、migration、rollback、客户端、Auth/Repository/AppStore/UI 与测试均已纳入功能分支提交；`.env.local` 未读取、未修改、未提交。— 来源：`@.specs/archive/2026-08-01-local-postgres-backend/T-FIX-03-SUMMARY.md`、2026-08-01 `git log`
+- 交付分支为 `codex/local-postgres-backend`；包含本地 Postgres 后端、`mobile-performance-green` 与各自归档工件，远端同步状态以 Git 为准。
+- `flow-kit/` 是项目采用的方法论与模板源，`review_test/` 是受自身 `AGENTS.md` 约束的静态视觉参考；两者在最终交付审计中纳入版本控制。
+- `.specs/ARCHITECTURE.md.bak-*` 仅作为本地可恢复备份保留并由 `.gitignore` 排除，不删除、不提交。
+- `openspec/changes/build-habit-review-mvp/tasks.md` 只有工作树行尾状态、无语义 diff，不纳入提交。
+- 本地后端运行依赖、Supabase 配置、migration、rollback、客户端、Auth/Repository/AppStore/UI 与测试均已纳入功能分支；`.env.local` 未读取、未修改、未提交。— 来源：`@.specs/archive/2026-08-01-local-postgres-backend/T-FIX-03-SUMMARY.md`、Git 历史
 
 ## 决策日志（最近 10 条，倒序）
 
+- `[2026-08-02]` `mobile-performance-green` 完成 INTEGRATION 并归档；修复 Modal 层级与响应式验证，功能 E2E 22/22、性能 2/2，desktop/mobile 均 20/20 完整且低于 1 秒。— 来源：`@.specs/archive/2026-08-02-mobile-performance-green/UAT.md`
+- `[2026-08-02]` 新建并 link Supabase 项目 `xunji-habit-review`（ref `hbxeltjioybgmxqjzeah`，Singapore）；4 个 migration 已通过 CLI push，远端历史一致、二次 dry-run 无待执行项。— 来源：2026-08-02 `supabase projects list`、`migration list --linked`、`db push --linked --dry-run`
+- `[2026-08-02]` 云端 Auth、匿名访问拒绝、`replace_user_store` RPC 与双账号 RLS 读写隔离均通过运行时烟雾测试；隔离测试用户及其级联业务数据已清理。— 来源：2026-08-02 Supabase Auth/Data API 实测
+- `[2026-08-02]` 云端数据库通过 IPv4 Supavisor session pooler 执行完整 pgTAP：4 files、174/174、Result PASS。— 来源：2026-08-02 用户终端 `supabase test db --db-url <pooler-url>` 输出
+- `[2026-08-02]` 生产部署边界确认为 Vercel 静态前端 + Supabase 云端 Auth/Data API/Postgres；本地 stack 继续承担开发、migration 重放和 pgTAP。云端 schema 只由 `supabase/migrations/` 经 CLI link / dry-run / push 发布，不使用 `db reset --linked`。— 来源：`@.specs/ARCHITECTURE.md#adr-009--vercel-前端--supabase-云端生产环境`
 - `[2026-08-01]` `local-postgres-backend` 完成 INTEGRATION 并归档；真实 Chrome↔Edge 同账号双向读取 PASS，Vitest 188、pgTAP 174、Playwright 12、Semgrep 110 rules 全绿。— 来源：`@.specs/archive/2026-08-01-local-postgres-backend/UAT.md`
 - `[2026-08-01]` REVIEW 首轮发现 reduced-motion Toast 生命周期缺陷；T-FIX-04 以 `8c4906b` 修复并独立重审 APPROVED。— 来源：`@.specs/archive/2026-08-01-local-postgres-backend/REVIEW.md`
 - `[2026-08-01]` TEST 五轮完成；补齐可执行 up→down→up 回滚和可复现 coverage 工具链，提名 LESSONS L-001～L-003。— 来源：`@.specs/archive/2026-08-01-local-postgres-backend/TEST.md`、`@.specs/LESSONS.md`
@@ -63,13 +68,13 @@ ai_context_doc: .specs/CONTEXT.md
 context_file: .specs/CONTEXT.md
 last_intel_scan: 2026-07-31
 detected_stack: TypeScript + React 19 + Vite PWA + Supabase Auth/Data API + Postgres 17/RLS + Vitest + Playwright
-accepted_target_stack: Local Supabase Auth + Data API + Postgres + RLS
+accepted_target_stack: Local Supabase for development and tests + Vercel frontend + Supabase Cloud Auth/Data API/Postgres/RLS for production
 pending_workspace_artifacts: none for local-postgres-backend; unrelated pre-existing docs/OpenSpec edits remain unstaged
 active_change_id:
-active_change_stage: change
+active_change_stage: archive-complete
 
 # 架构演进
-last_architect_at: 2026-07-31
+last_architect_at: 2026-08-02
 last_evolve_at:
 last_evolve_promoted: []
 
@@ -82,6 +87,13 @@ last_health_score:
 
 | 日期 | 命令 | 结果 | 说明 |
 |---|---|---|---|
+| 2026-08-02 | INTEGRATION 全量门禁 | 通过 | typecheck；Vitest 188；pgTAP 174；build；E2E 功能 22 + 性能 2；desktop P95 440.0ms、mobile P95 333.9ms |
+| 2026-08-02 | `supabase db push --linked`、`migration list --linked`、二次 `db push --linked --dry-run`、`db lint --linked`、`gen types --project-id` | 通过 | 新云端项目应用 4 个 migration；远端历史一致、无待执行、lint 0；三表与 `replace_user_store` 类型契约存在 |
+| 2026-08-02 | 云端 Auth/Data API 隔离烟雾测试 | 通过 | 两个临时已确认账号可登录；匿名表访问被拒；`replace_user_store` 返回预期 Store；所有者可读、另一账号不可读写；测试账号与级联数据清理完成 |
+| 2026-08-02 | `supabase test db --db-url <pooler-url>` | 通过 | 云端 4 files、174/174，Result PASS；密码仅临时注入当前终端 |
+| 2026-08-02 | TEST 五轮门禁 | 通过 | typecheck；Vitest 188；coverage lines 93.63%；pgTAP 174；build；E2E 24；Semgrep 110 rules 0 finding |
+| 2026-08-02 | `pnpm test:e2e` | 通过 | 功能 22/22；性能 desktop / mobile 2/2，均 20/20 完整且低于 1 秒 |
+| 2026-08-02 | `supabase migration list --local`、`supabase db push --local --dry-run`、`supabase db lint --local`、`supabase test db --local` | 通过 | 本地 4 个 migration 全部应用、无待推送、lint 0、pgTAP 174/174；云端尚未登录/link |
 | 2026-08-01 | `pnpm test:run` | 通过 | 20 files，188/188 |
 | 2026-08-01 | `pnpm typecheck`、`pnpm build` | 通过 | JS gzip 150.28KiB；仅 Vite chunk warning |
 | 2026-08-01 | `pnpm exec supabase test db --local` | 通过 | 4 files，174/174 |
@@ -101,7 +113,7 @@ last_health_score:
 
 - [x] `.specs/` 目录存在
 - [x] `.specs/CONTEXT.md` 与 `.specs/ARCHITECTURE.md` 已建立
-- [x] 当前无活跃 Flow Kit change，`local-postgres-backend` 已归档
+- [x] `local-postgres-backend` 与 `mobile-performance-green` 均已归档
 - [ ] 两个已完成 OpenSpec change 是否应归档，待用户另行决定
 - [x] 未发现仍处于自动重试中的失败
 - [x] `.specs/LESSONS.md` 已建立；T01 进入 DEV 前已按关键词检查

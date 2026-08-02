@@ -2,11 +2,11 @@
 
 - **维护者**：`flow-kit/prompts/A-architect.md`（首次 / 重构）+ `flow-kit/prompts/A-evolve.md`（增量同步 ADR）
 - **首次创建**：2026-07-31
-- **最近修订**：2026-07-31（A-architect 重构：引入本地 Supabase 后端）
-- **当前 ADR 编号最大值**：ADR-007
+- **最近修订**：2026-08-02（A-architect 重构：区分本地开发与 Vercel + Supabase 云端生产边界）
+- **当前 ADR 编号最大值**：ADR-009
 
 > `CONTEXT.md` 回答“AI 实施时遵守什么”；本文件回答“系统怎么搭起来”；单次 change 的 `DESIGN.md` 回答“这次变更怎么做”。
-> 本轮重构只调整架构文档，不修改业务代码或数据库。ADR 理由、代价与推翻成本已由用户于 2026-07-31 确认。
+> 本轮重构只调整架构决策文档，不修改业务规格或业务代码。云端 migration 的实际推送与验证由用户于 2026-08-02 单独授权，仍须使用 CLI 证据收口。
 
 ---
 
@@ -14,41 +14,44 @@
 
 ### 1.1 一句话定位
 
-一个个人自用、由本机 Supabase 统一存储数据的习惯记录、周复盘与长期洞察 PWA。当前目标只验证同一台电脑上两个浏览器登录同一账号后读取同一份数据。— 来源：用户于 2026-07-31 确认 A-architect 建议
+一个个人自用、由 Supabase 统一保存账号数据的习惯记录、周复盘与长期洞察 PWA：本地开发使用 Supabase CLI，生产前端托管到 Vercel，生产数据托管到 Supabase 云端项目。— 来源：用户于 2026-07-31、2026-08-02 确认
 
 ### 1.2 服务边界图
 
 ```mermaid
 graph LR
-  BrowserA["Chrome · 同一账号"] --> UI["React PWA"]
-  BrowserB["Edge · 同一账号"] --> UI
+  Browser["浏览器"] --> Vercel["Vercel · React PWA"]
+  Vercel --> UI["React UI / AppStore"]
   UI --> AppStore["AppStoreProvider"]
   AppStore --> Domain["日期、Store、周报、洞察、共现"]
   AppStore --> Repository["账号感知的数据访问层"]
-  UI --> Auth["本地 Supabase Auth"]
-  Repository --> DataAPI["Supabase Data API"]
+  UI --> Auth["Supabase Cloud Auth"]
+  Repository --> DataAPI["Supabase Cloud Data API"]
   Auth --> RLS["auth.uid() / RLS"]
   DataAPI --> RLS
-  RLS --> Postgres[("本地 Postgres")]
+  RLS --> Postgres[("Supabase Cloud Postgres")]
+  Migration["supabase/migrations"] --> CLI["Supabase CLI · link / db push"]
+  CLI --> Postgres
+  LocalUI["本地 Vite"] --> LocalStack["本地 Supabase CLI stack"]
   PWA["PWA 应用壳缓存"] --> UI
 ```
 
-- 页面、AppStore、领域层和本地 Repository 是当前已实现边界，见 `@src/App.tsx:12-42`、`@src/app/AppStore.tsx:16-128`、`@src/data/repository.ts:11-72`。
-- Auth、Data API、RLS 与 Postgres 是已确认的目标边界，必须由后续 `local-postgres-backend` change 通过需求、设计、migration 和测试落地；本图不代表源码已经接入。— 来源：用户于 2026-07-31 确认 A-architect 建议
+- 页面、AppStore、Supabase Auth、账号 Repository、四个 migration、RLS 与数据库测试均已由归档 change `local-postgres-backend` 落地。— 来源：`@.specs/archive/2026-08-01-local-postgres-backend/UAT.md`
+- 本地 Supabase 只承担开发、migration 重放和数据库测试；生产浏览器不得连接 `127.0.0.1`，只读取 Vercel 构建环境中的云端 URL 与 publishable key。— 来源：ADR-006、ADR-009
+- `supabase/migrations/` 是 schema 唯一发布源；云端 Dashboard 不作为未回写 migration 的 schema 编辑入口。— 来源：ADR-009、Supabase Database Migrations 文档
 - PWA 应用壳配置见 `@vite.config.ts:1-29`。
-- 仓库已有未提交 Supabase JS client、CLI 与本地 `config.toml`，但尚无业务 migration，`src/` 也尚未引用。— 来源：`@package.json:16-35`、`@supabase/config.toml`、2026-07-31 A-architect 扫描
 
 ### 1.3 关键非功能性指标（NFR 基线）
 
 | 维度 | 当前基线 | 来源 |
 |---|---|---|
-| 服务端 QPS / P95 | QPS 待测；本地读取目标 1 秒内，实际 P95 待测 | 用户于 2026-07-31 确认 A-architect 建议 |
-| 并发用户 | 1 个验证账号、同一台电脑 2 个同时在线浏览器 | 用户于 2026-07-31 确认 A-architect 建议 |
-| 数据量 / 存储上限 | 待确认 / 待实测；Data API 当前 `max_rows = 1000`，完整历史读取不得依赖单次无分页查询 | `@supabase/config.toml:7-24`、用户确认 NFR |
-| 可用性目标 | 无生产 SLA；本地 Supabase 未运行时业务数据不可读写，PWA 应用壳缓存不等于离线业务可用 | 用户于 2026-07-31 确认 A-architect 建议、`@vite.config.ts:7-29` |
+| 服务端 QPS / P95 | QPS 待运营数据；本地 10 Habit + 3,650 Completion 读取 P95 931.7ms，云端上线后须重新测量 | `@.specs/archive/2026-08-01-local-postgres-backend/UAT.md` |
+| 并发用户 | 当前个人自用；生产初期 1 个主账号，容量目标待真实使用数据 | 用户于 2026-08-02 授权上线 |
+| 数据量 / 存储上限 | Data API 每页最多 1000 行，Repository 已稳定分页；云端套餐容量与限额以目标项目实际配置为准 | `@supabase/config.toml:16-18`、`@src/data/supabaseRepository.ts` |
+| 可用性目标 | 暂不承诺产品 SLA；云端 Auth / API / Postgres 不可用时保留最后确认界面状态，不回退业务 localStorage | ADR-007、ADR-009 |
 | 响应式基线 | 主体在 320、390、768、1024、1440px 无横向溢出；小于 1024px 单列 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:69-81`、`@openspec/changes/build-habit-review-mvp/UI-spec.md:136-140` |
 | 无障碍基线 | 44×44px 最小交互尺寸、可见焦点、键盘可达、状态不只依赖颜色 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:50-63`、`@openspec/changes/build-habit-review-mvp/UI-spec.md:128-134` |
-| 当前自动验证 | typecheck 通过；Vitest 9 文件 51/51；两个 OpenSpec strict 通过 | 2026-07-31 本轮命令输出 |
+| 当前自动验证 | Vitest 188、本地与云端 pgTAP 各 174、Playwright 12、Semgrep 110 rules 通过；云端 migration/schema/Auth/RLS/RPC 运行时验证通过 | `@STATE.md`、`@.specs/archive/2026-08-01-local-postgres-backend/UAT.md` |
 | E2E 浏览器矩阵 | Playwright Desktop Chrome 1440×1000、Pixel 7 390×844；测试内部另覆盖目标宽度 | `@playwright.config.ts:11-19`、`@tests/e2e/app.spec.ts:244-326` |
 
 ## 2. 模块清单 + 边界
@@ -59,9 +62,9 @@ graph LR
 |---|---|---|---|---|---|
 | 启动与路由 | `src/main.tsx`、`src/App.tsx` | 挂载 React、提供 HashRouter、按 Store 状态选择 onboarding / recovery / 主页面 | `app`、`components`、`pages` | 浏览器入口 | `@src/main.tsx:1-10`、`@src/App.tsx:1-42` |
 | 应用状态 | `src/app/AppStore.tsx` | 读取 Store、提交候选、通知、错误、导入导出、跨标签更新 | `data`、`domain` | 页面与应用壳 | `@src/app/AppStore.tsx:16-128` |
-| 数据访问 | `src/data/` | 当前为 `localStorage` Repository；目标是账号感知的异步 Repository，负责 Supabase 读写、分页、错误映射与 Store 投影 | `domain`、Supabase client | `app` | 当前：`@src/data/repository.ts:1-72`；目标来源：ADR-006、ADR-007 |
-| 认证与会话（计划） | 路径由 `local-postgres-backend/DESIGN.md` 确认 | 邮箱密码注册、登录、会话恢复和退出；不承载业务数据 | Supabase Auth | 路由与 `app` | ADR-006；`@supabase/config.toml:155-226` |
-| 本地后端（计划） | `supabase/` | 本地 Auth、Data API、Postgres、migration 与 RLS 测试 | Docker 兼容运行时、Supabase CLI | `data`、测试 | ADR-006、ADR-007；`@package.json:31-35`、`@supabase/config.toml` |
+| 数据访问 | `src/data/` | 账号感知的异步 Supabase Repository，负责分页读写、错误映射、原子替换与 Store 投影 | `domain`、Supabase client | `app` | `@src/data/supabaseRepository.ts`、ADR-007、ADR-008 |
+| 认证与会话 | `src/auth/` | 邮箱密码注册、登录、会话恢复和退出；不承载业务数据 | Supabase Auth | 路由与 `app` | `@src/auth/AuthContext.tsx`、ADR-006 |
+| 本地后端与发布源 | `supabase/` | 本地 Auth/Data API/Postgres、migration、RLS 测试；同一 migrations 通过 CLI 推送云端 | Docker、Supabase CLI | `data`、测试、云端项目 | ADR-006、ADR-009；`@supabase/migrations/` |
 | 领域模型 | `src/domain/types.ts`、`store.ts` | Store 类型、习惯生命周期、记录命令、完整校验 | `dates` | `data`、`app`、`pages`、洞察组件 | `@src/domain/types.ts:1-47`、`@src/domain/store.ts:1-235` |
 | 日期与周报 | `src/domain/dates.ts`、`weeklyReport.ts` | 本地日期、自然周和周报纯计算 | `types`、`store` | 今天页、本周页、测试 | `@src/domain/dates.ts:1-66`、`@src/domain/weeklyReport.ts:1-74` |
 | 洞察与共现 | `src/domain/insightTypes.ts`、`insights.ts`、`coOccurrence.ts` | 观察窗口、趋势、习惯表现、共现与样本等级纯计算 | `dates`、`store`、`types` | 洞察页与详情组件 | `@src/domain/insights.ts:1-199`、`@src/domain/coOccurrence.ts:1-122` |
@@ -145,14 +148,14 @@ Supabase migration / RLS → Postgres + auth.users
 - **来源**：`@openspec/changes/build-habit-review-mvp/UI-spec.md:7-13`、`@openspec/changes/add-insights-dashboard/design.md:1-4`
 - **推翻成本**：低（可在不改变业务数据和页面任务层级的情况下替换资源策略）
 
-### ADR-006 · 使用本地 Supabase 作为账号与数据后端
+### ADR-006 · 使用本地 Supabase 作为开发与验证后端
 
 - **状态**：accepted（2026-07-31）
-- **取舍**：本地 Supabase / 自建 Node API + Postgres / 继续纯客户端 / 托管云后端
-- **决定**：浏览器通过 `@supabase/supabase-js` 使用本地 Supabase Auth 与 Data API，业务数据落在本机 Postgres；本轮不另建自定义 Node API，也不接入公网托管服务。
+- **取舍**：本地 Supabase / 自建 Node API + Postgres / 继续纯客户端
+- **决定**：开发与测试通过 `@supabase/supabase-js` 使用本地 Supabase Auth、Data API 和 Postgres；本地 stack 是 migration 重放、pgTAP 和浏览器 UAT 的验证环境，不作为公网生产后端。
 - **理由**：用已有项目级 Supabase CLI、client 和本地配置，以最小组件同时验证邮箱密码账号、Postgres 持久化和同账号跨浏览器读取。
 - **代价**：开发环境依赖 Docker 兼容运行时和本地服务；应用状态从同步存储变为异步网络状态；本地栈不具备生产加固，不能对公网暴露。
-- **来源 change**：A-architect 预决策；由待建 `local-postgres-backend` change 落地
+- **来源 change**：`local-postgres-backend`（已归档）
 - **来源**：用户于 2026-07-31 确认；`@package.json:16-35`、`@supabase/config.toml`、[Supabase 本地开发工作流](https://supabase.com/docs/guides/local-development/cli-workflows)
 - **推翻成本**：中（替换认证、数据客户端和本地运行方式；领域模型可继续复用）
 
@@ -163,9 +166,31 @@ Supabase migration / RLS → Postgres + auth.users
 - **决定**：`habits`、`completions` 进入 Postgres 关系表并关联 `auth.users`；两表启用 RLS，以 `auth.uid() = user_id` 约束账号只能读写自己的行。Postgres 是业务数据唯一真相源；Store v1 作为客户端领域投影和 JSON 导出格式继续存在。
 - **理由**：关系表支持记录级写入、数据库约束、账号隔离和跨浏览器读取，避免两个浏览器整体覆盖完整 Store。
 - **代价**：需要 migration、RLS policy、异步 Repository、分页和数据库测试；完整导入替换必须额外设计原子事务；不再支持无后端的离线业务写入。
-- **来源 change**：A-architect 预决策；由待建 `local-postgres-backend` change 落地
+- **来源 change**：`local-postgres-backend`（已归档）
 - **来源**：用户于 2026-07-31 确认；[Supabase RLS 文档](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - **推翻成本**：高（产生数据后更换主键、所有权或持久化形态需要数据库与客户端迁移）
+
+### ADR-008 · 当前账号 Store 使用受控事务 RPC 原子替换
+
+- **状态**：accepted（2026-07-31）
+- **取舍**：数据库事务 RPC / 浏览器多请求替换 / 每账号 JSON 快照 / 自建 Node API
+- **决定**：空白初始化、示例数据和 JSON 导入统一调用 `replace_user_store(Store v1 JSON)`；函数从 `auth.uid()` 取得账号，使用 `SECURITY INVOKER`、空 `search_path`、RLS 和最小执行授权，任一失败整体回滚。
+- **理由**：在保留关系表、记录级写入和 RLS 的同时，为完整 Store 替换提供全有或全无语义，避免浏览器多请求留下部分数据。
+- **代价**：需维护 PL/pgSQL 校验与权限测试；TypeScript 与数据库的结构、安全校验必须防止漂移；大型 JSON 请求体需要容量验证。
+- **来源 change**：`local-postgres-backend`（已归档）
+- **来源**：`@.specs/adr/008-atomic-account-store-replacement.md`、`@supabase/migrations/202607310002_local_postgres_backend.sql`
+- **推翻成本**：中（必须保留等价原子性、RLS 与失败回滚语义）
+
+### ADR-009 · Vercel 前端 + Supabase 云端生产环境
+
+- **状态**：accepted（2026-08-02）
+- **取舍**：Vercel + Supabase 托管云 / 暴露本地 Supabase / 自建前后端服务器 / 继续仅本机使用
+- **决定**：生产前端使用 Vercel 静态部署，生产 Auth、Data API 与 Postgres 使用一个专用 Supabase 云端项目；本地开发继续连接本地 stack。云端 schema 只由仓库 `supabase/migrations/` 经 `supabase link`、`db push --dry-run`、`db push` 发布，不使用 `db reset --linked`，也不在 Dashboard 留下未回写 migration 的 schema 改动。
+- **理由**：现有应用是 Vite SPA 且已通过 Supabase JS 访问标准 Auth/Data API；托管组合能以最少新增组件把已验证的本地后端部署到公网，同时保持本地 migration-first 工作流。
+- **代价**：需要管理本地、Preview、Production 的 URL 和 publishable key；生产可用性、配额、备份和供应商故障受托管平台约束；云端 migration 一旦承载真实数据，回退必须前向修复或执行已审查的非破坏性回滚。
+- **来源 change**：A-architect 生产部署决策（不修改业务规格）
+- **来源**：用户于 2026-08-02 授权；[Supabase Database Migrations](https://supabase.com/docs/guides/deployment/database-migrations)、[Supabase Managing Environments](https://supabase.com/docs/guides/deployment/managing-environments)、[Vercel Environments](https://vercel.com/docs/deployments/environments)
+- **推翻成本**：中（客户端只依赖标准 Supabase URL/key，但需迁移生产数据、Auth 用户、环境变量与部署配置）
 
 ## 4. 跨模块契约
 
@@ -231,9 +256,9 @@ erDiagram
 
 - `habits.user_id` 与 `completions.user_id` 均指向当前账号；RLS 的 SELECT / INSERT / UPDATE / DELETE policy 只授予 `authenticated` 且匹配 `auth.uid()` 的行。
 - `habits.id` 与 `completions.habit_id` 使用 `text`，保持 Store v1“非空字符串 ID”契约并兼容内置 `demo-*` ID；账号 `user_id` 继续使用 Supabase Auth 的 `uuid`。— 来源：用户于 2026-07-31 确认、`@src/domain/store.ts:162-180`、`@src/data/demo.ts:14-36`
-- Completion 的业务唯一性继续是同账号下 `(habit_id, date)`；数据库主键、复合外键、级联策略和检查约束进入 `local-postgres-backend/DESIGN.md`，此处不猜。
+- Completion 的业务唯一性是同账号下 `(habit_id, date)`；实际主键、复合外键、级联与检查约束以 `@supabase/migrations/202607310001_local_postgres_backend.sql` 为准。
 - Store v1 顶层仍只允许 `version`、`habits`、`completions`，用于领域计算与 JSON 导出。— 来源：`@src/domain/store.ts:142-156`、ADR-007
-- 当前尚无 migration 或业务 schema；只有 `supabase/config.toml`。— 来源：2026-07-31 A-architect 文件扫描
+- 当前 4 个 migration 已在本地顺序重放并通过 174 项 pgTAP，也已推送到 linked 云端项目；本地与远端 migration 历史一致，二次 dry-run 无待执行项，云端经 IPv4 session pooler 执行 174 项 pgTAP 全部通过。— 来源：2026-08-02 `supabase migration list --local/--linked`、`supabase db push --linked --dry-run`、`supabase test db --db-url <pooler-url>`
 
 ### 4.4 共享配置
 
@@ -241,8 +266,11 @@ erDiagram
 |---|---|---|---|
 | 旧 Store key | `xunji.store.v1` | 只保留未迁移历史；后端接入后不得作为权威业务数据源 | `@src/data/repository.ts:11-18`、ADR-007 |
 | Store version | `1` | 类型、校验、导入导出 | `@src/domain/types.ts:17-21`、`@src/domain/store.ts:148-156` |
-| 本地 Supabase API | `http://127.0.0.1:54321`（当前配置） | Auth、Data API | `@supabase/config.toml:7-10` |
-| Auth site URL | 当前为 `http://127.0.0.1:3000`，与前端实际开发地址是否一致待 DESIGN 验证 | Auth 重定向 | `@supabase/config.toml:155-163`、`@vite.config.ts:1-37` |
+| 本地 Supabase API | `.env.local` 的 `VITE_SUPABASE_URL=http://127.0.0.1:54321` | 本地 Auth、Data API | `@supabase/config.toml:7-10`、ADR-006 |
+| 云端 Supabase API | `https://hbxeltjioybgmxqjzeah.supabase.co`；Vercel Preview / Production 配置为 `VITE_SUPABASE_URL` | 云端 Auth、Data API | `xunji-habit-review` linked project、ADR-009 |
+| 浏览器公开 key | 只使用 `VITE_SUPABASE_PUBLISHABLE_KEY`；不得设置 service-role、数据库密码或 CLI access token | Supabase JS 客户端 | `@src/data/supabaseClient.ts`、ADR-009 |
+| Auth Site URL | 生产使用 Vercel 正式域名的精确 HTTPS URL；本地与 Preview 放入额外 redirect allowlist | 注册确认与后续 Auth 重定向 | ADR-009、[Supabase Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls) |
+| migration 发布 | `supabase link` → `db push --dry-run` → `db push` → `migration list --linked` | Supabase 云端 Postgres | ADR-009 |
 | Data API 单次行数 | `max_rows = 1000` | Repository 完整读取与导出必须分页 | `@supabase/config.toml:16-18` |
 | 洞察范围 | `7 | 30 | 90` 天 | 洞察、趋势、共现 | `@src/domain/insightTypes.ts:3-12` |
 | 响应式断点 | `<1024px` 单列；`>=1024px` 桌面 | 应用壳与全部页面 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:69-81` |
@@ -257,7 +285,7 @@ erDiagram
 | 新统计能力 | `src/domain/` | 纯函数输入 Store / 日期，先从 OpenSpec AC 派生领域测试 | `@src/domain/weeklyReport.ts:29-74`、`@AGENTS.md:103-108` |
 | 新持久化能力 | `src/data/repository.ts` | 不绕过完整校验、原子替换和失败保护 | `@src/data/repository.ts:16-59` |
 | 新认证能力 | change 级 DESIGN 决定路径 | 页面只消费 app/auth 契约，不直接散落 Supabase 调用；至少覆盖注册、登录、会话恢复、退出和未登录门 | ADR-006、R2.10 |
-| 新数据库表 / policy | `supabase/migrations/` | migration、回滚策略、RLS 与数据库测试必须同 change 交付；未经用户确认不执行 migration | ADR-007、`@AGENTS.md:143-146` |
+| 新数据库表 / policy | `supabase/migrations/` | 先在本地重放并通过 pgTAP；再经 linked project dry-run 和 push 发布，禁止只改云端 Dashboard | ADR-007、ADR-009、`@AGENTS.md:143-146` |
 | 新复用交互 | `src/components/` | 页面组合组件；保持键盘、焦点和非颜色状态表达 | `@openspec/changes/build-habit-review-mvp/UI-spec.md:128-134` |
 | 新测试 | `tests/domain|data|ui|e2e` | 单元/UI 使用 Vitest，浏览器流程使用 Playwright | `@package.json:7-14`、`@playwright.config.ts:3-19` |
 
@@ -271,6 +299,7 @@ erDiagram
 | 洞察 / 共现 | 最长 90 天；习惯对按两层循环生成 | 习惯数量或记录量导致可感知延迟时 | 先压测，再决定缓存、索引或 Worker | `@src/domain/coOccurrence.ts:99-122` |
 | Data API 完整读取 | 当前配置单次最多 1000 行 | 任何账号记录可能超过 1000 行 | Repository 分页或改用明确时间窗口；导出必须覆盖全部页 | `@supabase/config.toml:16-18` |
 | 本地服务可用性 | 无生产 SLA | Auth / API / Postgres 任一未运行 | 显示后端不可用，不回退到 localStorage 写入 | ADR-006、ADR-007 |
+| 云端托管配额 | 以目标 Supabase / Vercel 项目的实际套餐为准 | 任一配额达到 70% 或出现限流 | 记录用量后评估升级或容量 change，不预先增加服务 | ADR-009 |
 
 ## 7. 已知技术债 + 长期方向
 
@@ -278,11 +307,9 @@ erDiagram
 |---|---|---|---|---|
 | 浏览器存储与统计性能未基准测试 | 无法声明大数据量边界 | 低 | 实际数据增长或出现可感知卡顿 | 2026-07-31 扫描 |
 | `README.md` 部分相对链接在当前仓库不存在 | 新协作者无法从 README 打开真实规格路径 | 中 | 下一个文档维护 change | `@README.md:47-60` + 2026-07-31 路径核验 |
-| Flow Kit `UI-DESIGN.md` 尚未建立 | 未来 UI DEV 无法通过 R2.10 | 中 | 下一个用户可见 UI change 开始前 | `@AGENTS.md:91` + 2026-07-31 文件扫描 |
-| `ManagePage` 对 Repository 类型有一处直接依赖 | 页面层绕过新 hard rule | 中 | `local-postgres-backend` 设计数据契约时 | `@src/pages/ManagePage.tsx:7` |
-| Supabase Auth site URL 与前端实际开发地址未对齐验证 | 登录回调可能失效 | 高 | 进入 DESIGN 技术验证时 | `@supabase/config.toml:155-163`、`@vite.config.ts:1-37` |
-| 尚无业务 migration、RLS policy 或数据库测试 | 已确认目标架构尚不可运行 | 高 | `local-postgres-backend` change | 2026-07-31 文件扫描、ADR-007 |
-| 同步 AppStore / localStorage 测试需改为异步服务端模型 | 影响面大，不能把旧测试静默删除 | 高 | TASK / DEV / TEST 阶段 | `@src/app/AppStore.tsx:32-121`、`@tests/data/repository.test.ts`、`@tests/ui/App.test.tsx` |
+| 云端 pgTAP 不能使用本机 IPv6 数据库直连 | 当前网络无可用 IPv6；已验证 IPv4 Supavisor session pooler 可执行全量远端测试 | 低 | 后续沿用临时 `PGPASSWORD` + linked `pooler-url`；不得把数据库密码写入仓库 | 2026-08-02 直连超时诊断、云端 pgTAP 174/174、ADR-009 |
+| Vercel 正式域名尚未确定 | Auth Site URL 与生产 redirect allowlist 无法最终锁定 | 高 | 首次 Vercel Production 部署后配置精确 URL | ADR-009 |
+| 尚无云端性能、配额与备份恢复证据 | 本地 P95 不能外推生产 | 中 | 云端迁移与 Vercel 部署后执行 UAT 和恢复演练 | ADR-009 |
 
 ## 8. 修订历史
 
@@ -290,5 +317,6 @@ erDiagram
 |---|---|---|---|
 | 2026-07-31 | A-architect | 首次从 OpenSpec、UI 资产、评审证据与当前代码建立项目级架构 | A-architect 首跑 |
 | 2026-07-31 | A-architect | 重审 ADR-001～005；新增本地 Supabase、账号隔离与 Postgres 持久化方向 | A-architect 重构跑 |
+| 2026-08-02 | A-architect | 收录 ADR-008；新增 ADR-009，区分本地开发与 Vercel + Supabase 云端生产发布边界 | A-architect 重构跑 |
 
 > 后续只增量追加的架构事实走 A-evolve；涉及模块重组、删除旧 ADR 或推翻项目级决策时重跑 A-architect。

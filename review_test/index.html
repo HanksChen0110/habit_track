@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="循迹：个人习惯记录与每周复盘的静态视觉原型" />
+    <title>循迹 · 个人复盘</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 10c3 0 3-5 6-5s3 7 6 7 2-3 3-4' fill='none' stroke='%2320191b' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳至主要内容</a>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#today" aria-label="循迹，返回今天">
+          <svg viewBox="0 0 40 28" aria-hidden="true"><path d="M4 17c5 0 6-9 12-9s6 13 12 13 5-6 8-9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="3"/></svg>
+          <span>循迹</span>
+        </a>
+        <nav class="desktop-nav" aria-label="主导航">
+          <button class="nav-item active" data-page="today">今天</button>
+          <button class="nav-item" data-page="week">本周</button>
+          <button class="nav-item" data-page="insights">洞察</button>
+          <button class="nav-item" data-page="manage">管理</button>
+        </nav>
+        <span class="local-badge"><i></i>仅存于此设备</span>
+      </header>
+
+      <main id="main">
+        <section id="today" class="page active" aria-labelledby="today-title">
+          <div class="today-layout">
+            <div class="panel today-panel">
+              <div class="page-intro">
+                <div>
+                  <p class="eyebrow">Friday · 24 July</p>
+                  <h1 id="today-title">把今天，<br />记清楚。</h1>
+                </div>
+                <button class="icon-button" aria-label="新建每日习惯" title="新建习惯">＋</button>
+              </div>
+
+              <section class="today-progress" aria-label="今日完成量">
+                <div><strong id="today-count">2</strong><span> / 4</span></div>
+                <p id="today-copy">已完成一半，继续保持节奏。</p>
+                <div class="progress-track" aria-hidden="true"><span id="today-bar" style="width:50%"></span></div>
+              </section>
+
+              <div class="section-title"><h2>最近 7 天</h2><span>可补记漏掉的一天</span></div>
+              <div class="date-strip" role="group" aria-label="选择记录日期">
+                <button><span>六</span><b>18</b><i></i></button><button><span>日</span><b>19</b><i></i></button><button><span>一</span><b>20</b><i></i></button><button><span>二</span><b>21</b><i></i></button><button><span>三</span><b>22</b><i></i></button><button><span>四</span><b>23</b><i></i></button><button class="selected" aria-current="date"><span>今天</span><b>24</b><i></i></button>
+              </div>
+
+              <div class="section-title habits-label"><h2>今天的计划</h2><span>3 个习惯 · 4 次完成</span></div>
+              <div class="habit-list">
+                <article class="habit-row" data-target="1" data-count="1">
+                  <div class="habit-name"><span class="state-dot complete">✓</span><div><h3>阅读 30 分钟</h3><p>已完成 · 每日 1 次</p></div></div>
+                  <div class="stepper"><button class="minus" aria-label="阅读 30 分钟，减少一次">−</button><b>1 / 1</b><button class="plus" aria-label="阅读 30 分钟，增加一次">＋</button></div>
+                </article>
+                <article class="habit-row" data-target="1" data-count="1">
+                  <div class="habit-name"><span class="state-dot complete">✓</span><div><h3>快走或运动</h3><p>已完成 · 每日 1 次</p></div></div>
+                  <div class="stepper"><button class="minus" aria-label="快走或运动，减少一次">−</button><b>1 / 1</b><button class="plus" aria-label="快走或运动，增加一次">＋</button></div>
+                </article>
+                <article class="habit-row" data-target="2" data-count="0">
+                  <div class="habit-name"><span class="state-dot">·</span><div><h3>英语输入</h3><p>尚未开始 · 每日 2 次</p></div></div>
+                  <div class="stepper"><button class="minus" aria-label="英语输入，减少一次">−</button><b>0 / 2</b><button class="plus" aria-label="英语输入，增加一次">＋</button></div>
+                </article>
+              </div>
+              <button class="mobile-week-link" data-page="week">查看本周复盘 <span>→</span></button>
+            </div>
+
+            <aside class="panel week-summary" aria-label="本周摘要">
+              <p class="eyebrow">This week</p>
+              <div class="summary-rate"><strong>72<small>%</small></strong><p>本周执行率</p></div>
+              <dl><div><dt>完成量</dt><dd>13 / 18</dd></div><div><dt>相邻周变化</dt><dd class="positive">↑ 8 pp</dd></div><div><dt>最低日期</dt><dd>周三</dd></div></dl>
+              <button class="button dark" data-page="week">进入完整周报 <span>→</span></button>
+              <p class="quiet-note">只呈现执行事实，不猜测原因。</p>
+            </aside>
+          </div>
+        </section>
+
+        <section id="week" class="page" aria-labelledby="week-title">
+          <div class="panel report-panel">
+            <div class="report-head"><div><p class="eyebrow">Weekly review</p><h1 id="week-title">本周复盘</h1></div><div class="week-controls"><button class="icon-button" aria-label="上一周">←</button><span>7 月 20 日 – 24 日<small>进行中</small></span><button class="icon-button" aria-label="下一周" disabled>→</button></div></div>
+            <div class="report-overview"><div class="rate-card"><span>整体执行率</span><strong>72<small>%</small></strong><p>13 / 18 次完成</p></div><div class="change-card"><p>与上一个完整周相比</p><strong>↑ 8 个百分点</strong><span>节奏在变稳</span></div></div>
+            <div class="section-title chart-title"><h2>七日执行率</h2><span>截至今天</span></div>
+            <div class="bar-chart" aria-label="每日执行率柱形图">
+              <div class="bar-day"><div class="bar-track"><span style="height:85%"><b>85%</b></span></div><b>一</b><small>20</small></div><div class="bar-day"><div class="bar-track"><span style="height:100%"><b>100%</b></span></div><b>二</b><small>21</small></div><div class="bar-day"><div class="bar-track"><span style="height:33%"><b>33%</b></span></div><b>三</b><small>22</small></div><div class="bar-day"><div class="bar-track"><span style="height:67%"><b>67%</b></span></div><b>四</b><small>23</small></div><div class="bar-day"><div class="bar-track"><span style="height:50%"><b>50%</b></span></div><b>五</b><small>24</small></div><div class="bar-day future"><div class="bar-track"><em>—</em></div><b>六</b><small>25</small></div><div class="bar-day future"><div class="bar-track"><em>—</em></div><b>日</b><small>26</small></div>
+            </div>
+            <div class="facts"><div><span>最高执行日</span><strong>周二</strong><small>100% · 3 / 3</small></div><div><span>需要关注</span><strong>周三</strong><small>33% · 1 / 3</small></div><div><span>完成单位</span><strong>13 次</strong><small>计划 18 次</small></div></div>
+          </div>
+        </section>
+
+        <section id="insights" class="page" aria-labelledby="insights-title">
+          <div class="panel insights-panel">
+            <div class="report-head"><div><p class="eyebrow">Patterns, not judgement</p><h1 id="insights-title">执行洞察</h1></div><div class="range-tabs" role="group" aria-label="观察时间范围"><button class="active">7 天</button><button>30 天</button><button>90 天</button></div></div>
+            <div class="insight-cards"><article class="primary"><span>整体执行率</span><strong>72%</strong><small>共 18 个计划单位</small></article><article><span>稳定完成</span><strong>2 项</strong><small>达到 80% 以上</small></article><article><span>最佳时段</span><strong>周二</strong><small>执行率 100%</small></article><article><span>记录样本</span><strong>5 天</strong><small>当前观察窗口</small></article></div>
+            <div class="insight-grid"><section class="trend-card"><div class="section-title"><h2>执行率趋势</h2><span>整体</span></div><svg viewBox="0 0 680 220" role="img" aria-label="最近七天执行率趋势为 85%、100%、33%、67%、50%"><path d="M25 187H660M25 125H660M25 63H660" stroke="#e1e5e2" stroke-dasharray="3 6"/><path d="M25 55 L140 32 L255 158 L370 92 L485 124" fill="none" stroke="#20191b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><g fill="#fff" stroke="#a98bee" stroke-width="5"><circle cx="25" cy="55" r="7"/><circle cx="140" cy="32" r="7"/><circle cx="255" cy="158" r="7"/><circle cx="370" cy="92" r="7"/><circle cx="485" cy="124" r="7"/></g></svg><div class="chart-labels"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span></div></section>
+              <aside class="signal-card"><p class="eyebrow">本期线索</p><h2>阅读完成的日子，运动也更容易完成。</h2><p>在 5 天样本中，二者有 4 天同时达标（80%）。</p><small>伴随关系不代表因果。</small></aside>
+            </div>
+            <div class="insight-lower"><section class="matrix-card"><div class="section-title"><h2>习惯共现</h2><span>同时达标</span></div><div class="matrix-wrap"><table><thead><tr><th></th><th>阅读</th><th>运动</th><th>英语</th></tr></thead><tbody><tr><th>阅读</th><td>—</td><td>4 天</td><td>2 天</td></tr><tr><th>运动</th><td>4 天</td><td>—</td><td>1 天</td></tr><tr><th>英语</th><td>2 天</td><td>1 天</td><td>—</td></tr></tbody></table></div></section><section class="performance-card"><div class="section-title"><h2>习惯表现</h2><span>可下钻</span></div><button>阅读 30 分钟 <b>80%</b></button><button>快走或运动 <b>80%</b></button><button>英语输入 <b>55%</b></button></section></div>
+          </div>
+        </section>
+
+        <section id="manage" class="page" aria-labelledby="manage-title">
+          <div class="manage-layout"><div class="panel manage-panel"><div class="page-intro"><div><p class="eyebrow">Keep it intentional</p><h1 id="manage-title">习惯管理</h1></div><button class="button dark">＋ 新建习惯</button></div><div class="manage-group"><div class="section-title"><h2>进行中</h2><span>3 个习惯</span></div><article class="manage-row"><div><h3>阅读 30 分钟</h3><p>每天 1 次 · 创建于 7 月 1 日</p></div><div><button>编辑</button><button class="danger-text">归档</button></div></article><article class="manage-row"><div><h3>快走或运动</h3><p>每天 1 次 · 创建于 7 月 6 日</p></div><div><button>编辑</button><button class="danger-text">归档</button></div></article><article class="manage-row"><div><h3>英语输入</h3><p>每天 2 次 · 创建于 7 月 12 日</p></div><div><button>编辑</button><button class="danger-text">归档</button></div></article></div><div class="manage-group archived"><div class="section-title"><h2>已归档</h2><span>1 个习惯</span></div><article class="manage-row"><div><h3>晨间写作</h3><p>每天 1 次 · 归档于 6 月 30 日</p></div><span>已归档</span></article></div></div><aside class="panel data-side"><span class="file-mark">↗</span><p class="eyebrow">Your data</p><h2>一份轻量备份，<br />留给未来的你。</h2><p>数据只在当前浏览器保存。定期导出，可以让记录随时带走。</p><button class="button dark">导出 JSON</button><button class="button light">导入备份</button><small>导入会完整替换当前数据，执行前应确认备份内容。</small></aside></div>
+        </section>
+      </main>
+
+      <nav class="mobile-nav" aria-label="主导航"><button class="nav-item active" data-page="today"><span>⌂</span>今天</button><button class="nav-item" data-page="week"><span>◫</span>本周</button><button class="nav-item" data-page="insights"><span>⌁</span>洞察</button><button class="nav-item" data-page="manage"><span>□</span>管理</button></nav>
+    </div>
+    <div class="toast" aria-live="polite" role="status"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

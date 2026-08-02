@@ -8,5 +8,7 @@ output/playwright/
 # Generated design-search scratch output; the approved UI baseline is in OpenSpec.
 design-system/
 .superpowers/
+.env.local
+.specs/*.bak-*
 *.log
 .DS_Store
