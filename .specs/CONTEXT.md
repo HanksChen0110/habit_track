@@ -53,6 +53,8 @@
 | 样本等级 | 少于 7 天为积累中，7–13 天为初步线索，至少 14 天才可参与排序 | `@src/domain/coOccurrence.ts:17-18`、`@openspec/changes/add-insights-dashboard/specs/long-term-habit-insights/spec.md:34-44` |
 | 视口就绪状态 | 账号 Store 完整读取后，当前视口真实应显示的主要内容已可用；桌面可用周摘要作辅助信号，手机使用移动周报入口，不要求隐藏元素可见 | `@.specs/archive/2026-08-02-mobile-performance-green/REQUIREMENT.md#AC-4--桌面与移动使用各自的页面就绪信号` |
 | 性能基线隔离 | 资源敏感的 3,650 条记录读取测量不与另一同类基准并发，避免测试编排竞争被误判为产品性能回归 | `@.specs/archive/2026-08-02-mobile-performance-green/REQUIREMENT.md#AC-5--性能基线不受同类测量并发污染` |
+| CI 四关 | 本 change 约定的四个独立质量检查：`lint`、`typecheck`、`test`、`build`；其 job 名称也是 GitHub required check context | 用户于 2026-08-02 确认、`@.specs/ci-quality-gates/REQUIREMENT.md` |
+| Required status check | GitHub ruleset 中必须成功才能合并到受保护分支的检查 context；未完成或失败时合并被阻止 | 用户于 2026-08-02 确认、`@.specs/ci-quality-gates/REQUIREMENT.md#ac-4--main-将四关设为-required-status-checks` |
 
 ## 已锁决策
 
@@ -60,6 +62,8 @@
 - `[2026-07-25]` 洞察保持 Store v1，图表使用原生 SVG / CSS，不迁移 Tailwind 或 shadcn。— 来源：`@openspec/changes/add-insights-dashboard/design.md:1-4`
 - `[2026-07-31]` 本地开发与验证采用 Supabase CLI Auth + Data API + Postgres；本地 stack 不对公网暴露。— 来源：`@.specs/ARCHITECTURE.md#adr-006--使用本地-supabase-作为开发与验证后端`
 - `[2026-08-02]` 生产前端使用 Vercel，生产 Auth / Data API / Postgres 使用专用 Supabase 云端项目；schema 只由仓库 migration 经 CLI link / dry-run / push 发布。— 来源：`@.specs/ARCHITECTURE.md#adr-009--vercel-前端--supabase-云端生产环境`、用户授权
+- `[2026-08-02]` Vercel Production 稳定域名固定为 `https://xunji-nu.vercel.app`；生产构建从 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_PUBLISHABLE_KEY` 连接 Supabase，Auth Site URL 使用同一稳定域名。— 来源：2026-08-02 Vercel / Supabase 配置实测、`@harness-tool-audit.md`
+- `[2026-08-02]` `main` 的 CI 质量门固定为 `lint`、`typecheck`、`test`、`build` 四个独立 job，并以同名 context 设为 required status checks；本次不叠加人工审批、E2E、pgTAP、性能、覆盖率或安全扫描。— 来源：用户确认、`@.specs/ci-quality-gates/REQUIREMENT.md`
 - `[2026-07-31]` Habit / Completion 以关联 `user_id` 的关系表持久化并启用 RLS；Postgres 是业务数据唯一真相源，页面不得直接访问 Supabase 或业务 localStorage。— 来源：`@.specs/ARCHITECTURE.md#adr-007--账号隔离的关系型持久化与-rls`
 - `[2026-07-31]` 旧 `xunji.store.v1` 不自动迁移、不删除；Store v1 继续作为领域投影与 JSON 格式。自动迁移若需要应另开 change。— 来源：用户于 2026-07-31 确认
 - `[2026-07-31]` 本地读取性能基线为 10 个习惯、3,650 条完成记录、有效会话下连续测量 20 次，至少 19 次在 1 秒内使今天页列表和摘要可用，并且不得因单页限制遗漏记录。— 来源：用户于 2026-07-31 确认、`@.specs/local-postgres-backend/REQUIREMENT.md#ac-18--同账号数据读取性能`
@@ -75,7 +79,7 @@
 - `[2026-07-24]` 周报只比较紧邻上一个已结束自然周，不跨过空周寻找更早数据。— 来源：`@openspec/changes/build-habit-review-mvp/specs/weekly-execution-review/spec.md:48-57`
 - `[2026-07-24]` 手机、平板和桌面拥有相同核心功能；小于 1024px 使用单列与底部导航，桌面突出周摘要。— 来源：`@openspec/changes/build-habit-review-mvp/specs/responsive-pwa-experience/spec.md:3-37`、`@openspec/changes/build-habit-review-mvp/UI-spec.md:67-81`
 
-> **实现状态提示（2026-08-02）**：本地后端 change 已归档并通过完整验证；4 个 migration 已通过 CLI 推送到 `xunji-habit-review` 云端项目，远端历史、二次 dry-run、lint、类型契约、pgTAP 174/174、Auth、匿名拒绝、账号 RLS 隔离和 `replace_user_store` RPC 已核验，隔离测试用户及级联数据已清理。前端尚未部署到 Vercel。— 来源：`@STATE.md`、ADR-009
+> **实现状态提示（2026-08-02）**：本地后端 change 已归档并通过完整验证；4 个 migration 已发布到 `xunji-habit-review` 云端项目，远端历史、lint、类型契约、pgTAP 174/174、Auth、匿名拒绝、账号 RLS 隔离和 `replace_user_store` RPC 已核验。Vercel Production 已发布 `main@71da466` 至 `https://xunji-nu.vercel.app`。生产真实账号已注册并确认，3 条习惯经前端写入；主界面显示账号邮箱和退出入口，实际退出成功，用户重新登录后恢复同一账号的“学外语、跑步、阅读”3 条习惯。Vercel→Supabase Auth/Data API/Postgres 生产闭环 UAT 通过。— 来源：`@STATE.md`、ADR-009、2026-08-02 用户截图及 Chrome / Supabase 生产实测
 
 ## UI 资产索引（只索引，不复制全文）
 
@@ -168,7 +172,7 @@
 | 尚无 `.specs/LESSONS.md` | `@AGENTS.md:57`、`@AGENTS.md:76-78` | 未来 DEV 无跨任务失败库可扫描 | 首次需要记录 lesson 时按模板创建 |
 | 浏览器存储与统计性能未形成证据 | 2026-07-31 代码与规格扫描 | 无法声明容量上限 | 后端落地后改为 Postgres / Data API 容量验证 |
 | 云端 pgTAP 直连受本机 IPv6 网络限制 | 2026-08-02 direct DB connection timeout；IPv4 session pooler 已通过云端 174/174 pgTAP | 不阻塞发布；后续远端数据库测试不能直接复用 `--linked` 默认直连 | 在用户终端临时注入数据库密码，通过 linked `pooler-url` 运行；不得落盘 |
-| Vercel 正式域名与 Supabase Auth Site URL 尚未确定 | ADR-009 | 邮箱确认或未来 redirect flow 可能回到错误地址 | 首次 Production URL 生成后配置精确 Site URL 与必要的 Preview allowlist |
+| Vercel Preview 域名尚未加入 Supabase Redirect allowlist | ADR-009、2026-08-02 生产配置实测 | Preview 环境未来若启用邮箱确认或 OAuth，回调可能被拒；Production 稳定域名不受影响 | 首次需要 Preview Auth 时另行配置精确 Preview allowlist |
 | Data API `max_rows = 1000` | `@supabase/config.toml:16-18` | 完整历史或导出可能被静默截断 | Repository 必须分页；测试覆盖超过单页边界 |
 
 ## intel-scan 元数据

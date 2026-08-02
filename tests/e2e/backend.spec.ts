@@ -186,7 +186,7 @@ test('two isolated browser contexts persist one account while keeping a collidin
     expect(archivedHabit).toBeDefined()
     expect({
       version: exportedStore.version,
-      habits: exportedStore.habits.map(({ id, ...habit }) => habit).sort((left, right) => left.name.localeCompare(right.name)),
+      habits: exportedStore.habits.map(({ id: _id, ...habit }) => habit).sort((left, right) => left.name.localeCompare(right.name)),
       completions: exportedStore.completions
         .map((completion) => ({ ...completion, habitName: exportedStore.habits.find((habit) => habit.id === completion.habitId)?.name }))
         .sort((left, right) => left.habitName!.localeCompare(right.habitName!))
