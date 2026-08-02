@@ -45,7 +45,7 @@ Wave 4:            T05      (depends on T04)
   <depends_on></depends_on>
 </task>
 
-<task id="T02" parallel="true" status="pending">
+<task id="T02" parallel="true" status="done">
   <name>添加四个独立 GitHub Actions 质量 job</name>
   <read_files>
     package.json
@@ -61,7 +61,7 @@ Wave 4:            T05      (depends on T04)
     按 D2～D4 创建一个只读 CI workflow：仅在 `pull_request → main` 和 `push → main` 运行，job 名称固定为 lint、typecheck、test、build，四者各自使用冻结 pnpm lockfile 并调用同名对应脚本。不得读取 secrets 或生产配置。
   </action>
   <verify>git diff --check -- .github/workflows/ci.yml; rg -n "pull_request:|push:|contents: read|^  (lint|typecheck|test|build):|--frozen-lockfile|secrets:" .github/workflows/ci.yml</verify>
-  <done>workflow 静态结构满足 AC-2、AC-3；真实 GitHub Actions 运行由 T04 验证。</done>
+  <done>workflow 静态结构满足 AC-2、AC-3；真实 GitHub Actions 运行由 T04 验证。（2026-08-02 14:08）</done>
   <depends_on></depends_on>
 </task>
 
