@@ -27,3 +27,4 @@
 | 2026-08-02 12:58:53 +08:00 | Chrome / Supabase Auth/Data API/Postgres | 用户本人重新登录后核验账号会话与业务数据恢复（不记录凭据） | 是，用户已授权真实账号数据读取与生产验证 | 成功；同一账号重新进入主界面，恢复“学外语、跑步、阅读”3 条习惯，“退出账号”仍可用 | 生产账号与数据连通性 UAT |
 | 2026-08-02 13:18:16 +08:00 | `git push -u origin codex/local-postgres-backend` + 审计跟进推送 | 推送生产账号连通性 UAT、Flow Kit 状态同步及撤回记录提交 `06a2dbe`，并同步本审计行 | 是，用户本轮明确要求再次 commit/push | 成功；远端交付分支快进并包含 UAT 文档与本次 push 审计 | 生产 UAT 文档交付 |
 | 2026-08-02 14:16:00 +08:00 | `git push origin codex/local-postgres-backend` + GitHub Pull Request | 推送 CI 四关交付分支并创建 PR #1（`codex/local-postgres-backend` → `main`）触发真实 Actions | 是，用户已授权自动执行后续流程及 CI/ruleset 配置 | 成功；CI run 30735572011 的 lint、typecheck、test、build 均成功 | T04 |
+| 2026-08-02 14:18:00 +08:00 | GitHub Rulesets API | 为默认分支 main 创建 active ruleset `main-ci-required-checks`（ID 20223088），required checks 为 lint、typecheck、test、build，strict=true | 是，用户已明确授权 CI ruleset 配置 | 成功；GET 回读精确四个 GitHub Actions context，PR #1 四关成功且 `mergeStateStatus=CLEAN` | T05 |

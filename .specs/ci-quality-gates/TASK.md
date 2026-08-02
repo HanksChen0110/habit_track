@@ -113,7 +113,7 @@ Wave 4:            T05      (depends on T04)
   <depends_on>T01,T02,T03</depends_on>
 </task>
 
-<task id="T05" parallel="false" status="pending">
+<task id="T05" parallel="false" status="done">
   <name>配置 main required checks 并验证 PR 合并门禁</name>
   <read_files>
     .specs/ci-quality-gates/REQUIREMENT.md
@@ -130,7 +130,7 @@ Wave 4:            T05      (depends on T04)
     读取真实 GitHub Actions check context 后创建或更新仅匹配 main 的 active ruleset：lint、typecheck、test、build 均为 required，要求分支最新，不加审批或其他限制。GET 回读 ruleset，并从 T04 的 PR 读取 mergeStateStatus 与 statusCheckRollup，记录 “四关成功时门禁放行；未完成/失败时按 ruleset 阻止合并” 的配置与运行时证据。高风险远端规则写入按用户本轮自动授权审计。
   </action>
   <verify>gh api repos/HanksChen0110/habit_track/rulesets; gh pr view --json number,mergeStateStatus,statusCheckRollup,isDraft</verify>
-  <done>AC-4、AC-5 的 ruleset 与 PR 状态证据已记录；main 的 required checks 是四个精确 context。</done>
+  <done>AC-4、AC-5 的 ruleset 与 PR 状态证据已记录；main 的 required checks 是四个精确 context。（2026-08-02 14:18）</done>
   <depends_on>T04</depends_on>
 </task>
 ```
