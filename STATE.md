@@ -1,15 +1,15 @@
 # STATE — 跨会话项目状态
 
 > 仓库根项目状态。后续会话先读本文件，再按当前阶段加载 `.specs/` 工件。
-> 首次创建：2026-07-31；A-architect 已重审本地后端方向，REQUIREMENT、DESIGN 与 UI-DESIGN 已确认；DEV T01、T02、T04 已完成并提交。
+> 首次创建：2026-07-31；最近归档：`ci-quality-gates`（2026-08-02）。
 
 ---
 
 ## 当前位置
 
-- **活跃 Flow Kit Change**：`ci-quality-gates`
-- **当前阶段**：INTEGRATION（验证完成，待推送、GitHub 最终四关与合并）
-- **当前 Task**：本地 UAT 已通过；待更新 PR、核验最终 Actions 并合并到 main
+- **活跃 Flow Kit Change**：无
+- **当前阶段**：ARCHIVE（`ci-quality-gates` 已归档）
+- **当前 Task**：无
 - **中断任务**：无
 - **现有 OpenSpec 状态**：
   - `build-habit-review-mvp`：文件仍位于 `openspec/changes/`，`tasks.md` 已全部勾选；是当前 MVP 实施来源，不映射为 Flow Kit 活跃 change。— 来源：`@AGENTS.md:12-18`、`@openspec/changes/build-habit-review-mvp/tasks.md:1-48`
@@ -29,7 +29,7 @@
 
 ## 工作区与交付边界
 
-- 交付分支为 `codex/local-postgres-backend`；包含本地 Postgres 后端、`mobile-performance-green` 与各自归档工件，远端同步状态以 Git 为准。
+- 默认交付分支为 `main`；本地 Postgres 后端、`mobile-performance-green` 与已合并的 CI 四关工件均已同步，远端状态以 Git 为准。
 - `flow-kit/` 是项目采用的方法论与模板源，`review_test/` 是受自身 `AGENTS.md` 约束的静态视觉参考；两者在最终交付审计中纳入版本控制。
 - `.specs/ARCHITECTURE.md.bak-*` 仅作为本地可恢复备份保留并由 `.gitignore` 排除，不删除、不提交。
 - `openspec/changes/build-habit-review-mvp/tasks.md` 只有工作树行尾状态、无语义 diff，不纳入提交。
@@ -37,7 +37,7 @@
 
 ## 决策日志（最近 10 条，倒序）
 
-- `[2026-08-02]` 用户要求建立 GitHub Actions 四关（lint、typecheck、test、build），并通过 main ruleset 将四个同名检查设为 required status checks；不附加人工审批等额外限制。— 来源：用户指令、2026-08-02 GitHub / 仓库预检、`@.specs/ci-quality-gates/CHANGE.md`
+- `[2026-08-02]` `ci-quality-gates` 已归档；Oxlint、GitHub Actions 四关和 main required checks 已上线。PR #1 与 main push 均全绿；完整本地 E2E 24/24 通过。— 来源：`@.specs/archive/2026-08-02-ci-quality-gates/UAT.md`、GitHub Actions run 30736148539、ruleset 20223088
 - `[2026-08-02]` 生产真实账号已注册并确认；示例初始化写入 3 条习惯，账号邮箱和“退出账号”可见，实际退出成功；用户重新登录后恢复同一账号的“学外语、跑步、阅读”3 条习惯，Vercel→Supabase Auth/Data API/Postgres 闭环 UAT 通过。`onboarding-account-exit` 源于过渡页误判，已撤回且不进入实现。— 来源：2026-08-02 用户截图、Chrome / Supabase 实测、`@harness-tool-audit.md`
 - `[2026-08-02]` Vercel Production 已发布 `main@71da466`，稳定域名为 `https://xunji-nu.vercel.app`；Production 环境变量使用 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_PUBLISHABLE_KEY`，Supabase Auth Site URL 已同步为该域名。— 来源：2026-08-02 Vercel / Supabase / Chrome 实测、`@harness-tool-audit.md`
 - `[2026-08-02]` `mobile-performance-green` 完成 INTEGRATION 并归档；修复 Modal 层级与响应式验证，功能 E2E 22/22、性能 2/2，desktop/mobile 均 20/20 完整且低于 1 秒。— 来源：`@.specs/archive/2026-08-02-mobile-performance-green/UAT.md`
@@ -61,6 +61,7 @@
 
 ## 已归档 Flow Kit Changes（最近 5 个，倒序）
 
+- `2026-08-02-ci-quality-gates`：GitHub Actions lint/typecheck/test/build 四关与 main required checks；PR 与 main push 全绿。— 来源：`@.specs/archive/2026-08-02-ci-quality-gates/UAT.md`
 - `2026-08-01-local-postgres-backend`：本机 Supabase Auth + Postgres/RLS，同账号 Chrome↔Edge 共享账号数据；UAT PASS。— 来源：`@.specs/archive/2026-08-01-local-postgres-backend/UAT.md`
 
 ## 横向命令状态
@@ -72,9 +73,9 @@ context_file: .specs/CONTEXT.md
 last_intel_scan: 2026-07-31
 detected_stack: TypeScript + React 19 + Vite PWA + Supabase Auth/Data API + Postgres 17/RLS + Vitest + Playwright
 accepted_target_stack: Local Supabase for development and tests + Vercel frontend + Supabase Cloud Auth/Data API/Postgres/RLS for production
-pending_workspace_artifacts: none for local-postgres-backend; unrelated pre-existing docs/OpenSpec edits remain unstaged
-active_change_id: ci-quality-gates
-active_change_stage: integration-in-progress
+pending_workspace_artifacts: none; ci-quality-gates archived on 2026-08-02
+active_change_id: none
+active_change_stage: archived
 
 # 架构演进
 last_architect_at: 2026-08-02
@@ -90,6 +91,7 @@ last_health_score:
 
 | 日期 | 命令 | 结果 | 说明 |
 |---|---|---|---|
+| 2026-08-02 | GitHub Actions run 30736148539 | 通过 | `main@feccacf` push 后 lint、typecheck、test、build 四关均成功；main ruleset 20223088 仍精确要求这四个检查 |
 | 2026-08-02 | Vercel Production + Chrome→Supabase Auth/Data API/Postgres | 通过 | `main@71da466` 部署 Ready；真实账号注册成功；3 条习惯写入和读取一致；账号显示、退出和重新登录通过，重新登录后恢复同一账号的 3 条习惯 |
 | 2026-08-02 | INTEGRATION 全量门禁 | 通过 | typecheck；Vitest 188；pgTAP 174；build；E2E 功能 22 + 性能 2；desktop P95 440.0ms、mobile P95 333.9ms |
 | 2026-08-02 | `supabase db push --linked`、`migration list --linked`、二次 `db push --linked --dry-run`、`db lint --linked`、`gen types --project-id` | 通过 | 新云端项目应用 4 个 migration；远端历史一致、无待执行、lint 0；三表与 `replace_user_store` 类型契约存在 |
