@@ -88,7 +88,7 @@ Wave 4:            T05      (depends on T04)
   <depends_on>T01</depends_on>
 </task>
 
-<task id="T04" parallel="false" status="pending">
+<task id="T04" parallel="false" status="done">
   <name>推送 CI workflow 并核验真实四关运行</name>
   <read_files>
     package.json
@@ -109,7 +109,7 @@ Wave 4:            T05      (depends on T04)
     对 T01～T03 的原子提交执行相关本地四关；推送当前交付分支，并创建或复用一个目标为 main 的 draft PR 触发真实 Actions。读取该 run 的 jobs、命令和结论，确认名称精确为 lint、typecheck、test、build，且四项均成功。高风险 push 与 PR 创建按用户本轮自动授权审计。
   </action>
   <verify>gh pr view --json number,headRefName,baseRefName,statusCheckRollup,isDraft; gh run list --branch codex/local-postgres-backend --limit 5</verify>
-  <done>AC-2、AC-3 的真实 GitHub Actions 证据已记录，四项质量门均为成功。</done>
+  <done>AC-2、AC-3 的真实 GitHub Actions 证据已记录，四项质量门均为成功。（2026-08-02 14:16）</done>
   <depends_on>T01,T02,T03</depends_on>
 </task>
 
