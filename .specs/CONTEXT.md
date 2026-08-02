@@ -53,6 +53,8 @@
 | 样本等级 | 少于 7 天为积累中，7–13 天为初步线索，至少 14 天才可参与排序 | `@src/domain/coOccurrence.ts:17-18`、`@openspec/changes/add-insights-dashboard/specs/long-term-habit-insights/spec.md:34-44` |
 | 视口就绪状态 | 账号 Store 完整读取后，当前视口真实应显示的主要内容已可用；桌面可用周摘要作辅助信号，手机使用移动周报入口，不要求隐藏元素可见 | `@.specs/archive/2026-08-02-mobile-performance-green/REQUIREMENT.md#AC-4--桌面与移动使用各自的页面就绪信号` |
 | 性能基线隔离 | 资源敏感的 3,650 条记录读取测量不与另一同类基准并发，避免测试编排竞争被误判为产品性能回归 | `@.specs/archive/2026-08-02-mobile-performance-green/REQUIREMENT.md#AC-5--性能基线不受同类测量并发污染` |
+| CI 四关 | 本 change 约定的四个独立质量检查：`lint`、`typecheck`、`test`、`build`；其 job 名称也是 GitHub required check context | 用户于 2026-08-02 确认、`@.specs/ci-quality-gates/REQUIREMENT.md` |
+| Required status check | GitHub ruleset 中必须成功才能合并到受保护分支的检查 context；未完成或失败时合并被阻止 | 用户于 2026-08-02 确认、`@.specs/ci-quality-gates/REQUIREMENT.md#ac-4--main-将四关设为-required-status-checks` |
 
 ## 已锁决策
 
@@ -61,6 +63,7 @@
 - `[2026-07-31]` 本地开发与验证采用 Supabase CLI Auth + Data API + Postgres；本地 stack 不对公网暴露。— 来源：`@.specs/ARCHITECTURE.md#adr-006--使用本地-supabase-作为开发与验证后端`
 - `[2026-08-02]` 生产前端使用 Vercel，生产 Auth / Data API / Postgres 使用专用 Supabase 云端项目；schema 只由仓库 migration 经 CLI link / dry-run / push 发布。— 来源：`@.specs/ARCHITECTURE.md#adr-009--vercel-前端--supabase-云端生产环境`、用户授权
 - `[2026-08-02]` Vercel Production 稳定域名固定为 `https://xunji-nu.vercel.app`；生产构建从 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_PUBLISHABLE_KEY` 连接 Supabase，Auth Site URL 使用同一稳定域名。— 来源：2026-08-02 Vercel / Supabase 配置实测、`@harness-tool-audit.md`
+- `[2026-08-02]` `main` 的 CI 质量门固定为 `lint`、`typecheck`、`test`、`build` 四个独立 job，并以同名 context 设为 required status checks；本次不叠加人工审批、E2E、pgTAP、性能、覆盖率或安全扫描。— 来源：用户确认、`@.specs/ci-quality-gates/REQUIREMENT.md`
 - `[2026-07-31]` Habit / Completion 以关联 `user_id` 的关系表持久化并启用 RLS；Postgres 是业务数据唯一真相源，页面不得直接访问 Supabase 或业务 localStorage。— 来源：`@.specs/ARCHITECTURE.md#adr-007--账号隔离的关系型持久化与-rls`
 - `[2026-07-31]` 旧 `xunji.store.v1` 不自动迁移、不删除；Store v1 继续作为领域投影与 JSON 格式。自动迁移若需要应另开 change。— 来源：用户于 2026-07-31 确认
 - `[2026-07-31]` 本地读取性能基线为 10 个习惯、3,650 条完成记录、有效会话下连续测量 20 次，至少 19 次在 1 秒内使今天页列表和摘要可用，并且不得因单页限制遗漏记录。— 来源：用户于 2026-07-31 确认、`@.specs/local-postgres-backend/REQUIREMENT.md#ac-18--同账号数据读取性能`
