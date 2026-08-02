@@ -26,6 +26,7 @@ export function Modal({
 
   useEffect(() => {
     const dialog = dialogRef.current
+    const previousFocus = previousFocusRef.current
     const focusable = () =>
       Array.from(
         dialog?.querySelectorAll<HTMLElement>('button, input, select, textarea, [href], [tabindex]') ?? []
@@ -57,7 +58,7 @@ export function Modal({
     window.addEventListener('keydown', handleKey)
     return () => {
       window.removeEventListener('keydown', handleKey)
-      previousFocusRef.current?.focus()
+      previousFocus?.focus()
     }
   }, [])
 

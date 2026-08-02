@@ -65,7 +65,7 @@ Wave 4:            T05      (depends on T04)
   <depends_on></depends_on>
 </task>
 
-<task id="T03" parallel="false" status="pending">
+<task id="T03" parallel="false" status="done">
   <name>修复首次 lint 暴露的真实违规</name>
   <read_files>
     package.json
@@ -84,7 +84,7 @@ Wave 4:            T05      (depends on T04)
     运行 T01 引入的 lint；若命中，按 DESIGN 0.5 仅做不改变产品行为和测试断言语义的最小修复。若 lint 已通过，记录零源码改动证据。不得降级核心规则或使用 disable 注释掩盖问题。
   </action>
   <verify>pnpm lint</verify>
-  <done>AC-1 的 lint 检查通过，且任何源码/测试修改均可追溯为 lint 合规修复。</done>
+  <done>AC-1 的 lint 检查通过，且任何源码/测试修改均可追溯为 lint 合规修复。（2026-08-02 14:14）</done>
   <depends_on>T01</depends_on>
 </task>
 
