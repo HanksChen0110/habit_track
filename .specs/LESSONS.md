@@ -8,6 +8,7 @@
 - L-002：不要用 CSS animationend 管理业务状态生命周期
 - L-003：Supabase credential Promise 与 auth event 的顺序不是单一权威
 - L-004：UI 触发异步持久化后不要立刻用刷新验证无关行为
+- L-005：Supabase CLI start 返回成功不代表 Auth/Data API 已可承接并行 E2E
 
 ## 条目
 
@@ -102,3 +103,26 @@ E2E 点击会异步写入后端的“载入示例”后，响应式布局用例�
 
 **何时可重新评估**
 相关 UI action 明确定义为等待后端持久化完成才 resolve，且有回归测试证明刷新不会抢跑时。
+
+### L-005 · [supabase, e2e, tool, race] Supabase CLI start 返回成功不代表 Auth/Data API 已可承接并行 E2E
+
+- **首发**：ci-quality-gates · INTEGRATION · 2026-08-02
+- **上次复核**：2026-08-02
+- **适用栈**：Supabase CLI 本地 stack / Playwright 并行 E2E / React Supabase browser client
+- **状态**：active
+- **关键词**：supabase start status readiness Auth Data API 401 Playwright parallel E2E
+
+**问题场景**
+刚执行 `supabase start` 后立即以多 worker 启动需要注册、获取 session、读取 `user_data_state` 的 Playwright E2E。
+
+**当时尝试的方案**
+把 CLI 命令 exit 0 当作所有网关、Auth 与 PostgREST 已完成就绪，立即运行 `pnpm test:e2e`。
+
+**为什么不行**
+首次并行运行 22 项功能用例时，只有最早开始的 desktop/mobile `backend.spec.ts` 在注册成功后读取 `user_data_state` 得到 401，最终 20/22 通过；稍后的账户用例全部成功。执行 `supabase status` 后重跑失败用例 2/2 通过，随后完整 24 项 E2E 全绿，证明是启动就绪竞争而不是产品逻辑失败。
+
+**当前推荐做法**
+本地 stack 启动后先运行 `pnpm exec supabase status --output json`（至少确认 API、REST、DB endpoint 可用），再启动并行浏览器测试；若首轮只在最早用例出现 401，保留失败证据、就绪后重跑完整命令，不能直接把失败归因于业务代码。见 `@.specs/ci-quality-gates/UAT.md`。
+
+**何时可重新评估**
+项目将 E2E harness 显式接入可轮询的 Auth/Data API health check，或 Supabase CLI 提供包含全部服务就绪语义的稳定等待命令时。

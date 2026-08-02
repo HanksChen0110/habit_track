@@ -8,8 +8,8 @@
 ## 当前位置
 
 - **活跃 Flow Kit Change**：`ci-quality-gates`
-- **当前阶段**：REVIEW（completed，待进入 INTEGRATION）
-- **当前 Task**：已完成 CI 质量门三轮审查；待集成验证与合并
+- **当前阶段**：INTEGRATION（验证完成，待推送、GitHub 最终四关与合并）
+- **当前 Task**：本地 UAT 已通过；待更新 PR、核验最终 Actions 并合并到 main
 - **中断任务**：无
 - **现有 OpenSpec 状态**：
   - `build-habit-review-mvp`：文件仍位于 `openspec/changes/`，`tasks.md` 已全部勾选；是当前 MVP 实施来源，不映射为 Flow Kit 活跃 change。— 来源：`@AGENTS.md:12-18`、`@openspec/changes/build-habit-review-mvp/tasks.md:1-48`
@@ -74,7 +74,7 @@ detected_stack: TypeScript + React 19 + Vite PWA + Supabase Auth/Data API + Post
 accepted_target_stack: Local Supabase for development and tests + Vercel frontend + Supabase Cloud Auth/Data API/Postgres/RLS for production
 pending_workspace_artifacts: none for local-postgres-backend; unrelated pre-existing docs/OpenSpec edits remain unstaged
 active_change_id: ci-quality-gates
-active_change_stage: review-complete
+active_change_stage: integration-in-progress
 
 # 架构演进
 last_architect_at: 2026-08-02
