@@ -29,3 +29,4 @@
 | 2026-08-02 14:16:00 +08:00 | `git push origin codex/local-postgres-backend` + GitHub Pull Request | 推送 CI 四关交付分支并创建 PR #1（`codex/local-postgres-backend` → `main`）触发真实 Actions | 是，用户已授权自动执行后续流程及 CI/ruleset 配置 | 成功；CI run 30735572011 的 lint、typecheck、test、build 均成功 | T04 |
 | 2026-08-02 14:18:00 +08:00 | GitHub Rulesets API | 为默认分支 main 创建 active ruleset `main-ci-required-checks`（ID 20223088），required checks 为 lint、typecheck、test、build，strict=true | 是，用户已明确授权 CI ruleset 配置 | 成功；GET 回读精确四个 GitHub Actions context，PR #1 四关成功且 `mergeStateStatus=CLEAN` | T05 |
 | 2026-08-02 14:34:00 +08:00 | `git push origin codex/local-postgres-backend` | 推送 CI TEST / REVIEW / UAT / LESSONS 集成工件至 PR #1，并触发最新四关 | 是，用户已授权自动执行后续流程 | 成功；PR #1 head 更新为 `e142fee`，等待最新 CI 结论后合并 | INTEGRATION |
+| 2026-08-02 14:36:00 +08:00 | `Move-Item` | 将 `.specs/ci-quality-gates/` 归档为 `.specs/archive/2026-08-02-ci-quality-gates/` | 是，用户明确回复“确认归档” | 成功；13 个 change 工件完整移动，源目录已不存在 | INTEGRATION / ARCHIVE |
