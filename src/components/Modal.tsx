@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useEffect, useRef, type ReactNode } from 'react'
 
 export function Modal({
@@ -60,7 +61,7 @@ export function Modal({
     }
   }, [])
 
-  return (
+  return createPortal(
     <div className={`modal-backdrop ${variant === 'sheet' ? 'is-sheet' : ''}`} onMouseDown={(event) => event.target === event.currentTarget && !closeDisabled && onClose()}>
       <section ref={dialogRef} className={`modal ${variant === 'sheet' ? 'detail-sheet' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
         <div className="modal-heading">
@@ -74,6 +75,7 @@ export function Modal({
         </div>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body
   )
 }

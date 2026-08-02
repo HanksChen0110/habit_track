@@ -310,6 +310,9 @@ test('account controls, modal focus and reduced motion remain accessible', async
   expect(Number.parseFloat(motion.transitionDuration)).toBeLessThanOrEqual(0.001)
 
   await createButton.click()
+  if ((page.viewportSize()?.width ?? 1024) < 1024) {
+    await expect(page.locator('.mobile-nav')).toBeVisible()
+  }
   await page.getByLabel('习惯名称').fill('减弱动态测试')
   await page.getByRole('button', { name: '保存习惯' }).click()
   const toast = page.locator('.toast')
