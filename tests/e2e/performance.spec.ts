@@ -25,6 +25,17 @@ interface Sample {
   pageKeys: string[]
 }
 
+async function expectViewportReady(page: Page): Promise<void> {
+  await expect(page.getByTestId('habit-row')).toHaveCount(HABIT_COUNT)
+  if ((page.viewportSize()?.width ?? 1024) < 1024) {
+    await expect(page.locator('.mobile-week-link')).toBeVisible()
+    await expect(page.locator('.summary-panel')).toBeHidden()
+    return
+  }
+  await expect(page.locator('.summary-panel')).toBeVisible()
+  await expect(page.locator('.mobile-week-link')).toBeHidden()
+}
+
 function createAccount(testInfo: TestInfo): Account {
   const slug = testInfo.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 20)
   return {
@@ -85,7 +96,7 @@ async function importBenchmarkStore(page: Page): Promise<void> {
   await dialog.getByRole('button', { name: '完整替换' }).click()
   await expect(page.getByRole('link', { name: '今天', exact: true }).filter({ visible: true })).toBeVisible()
   await page.getByRole('link', { name: '今天', exact: true }).filter({ visible: true }).click()
-  await expect(page.getByTestId('habit-row')).toHaveCount(HABIT_COUNT)
+  await expectViewportReady(page)
 }
 
 type DataTable = 'habits' | 'completions'
@@ -156,8 +167,7 @@ async function measureRefresh(page: Page): Promise<Sample> {
   page.on('response', onResponse)
   try {
     await page.reload()
-    await expect(page.getByTestId('habit-row')).toHaveCount(HABIT_COUNT)
-    await expect(page.locator('.summary-panel')).toBeVisible()
+    await expectViewportReady(page)
     expect(readStartedAt, '必须从 user_data_state 首个 GET 开始计时').toBeDefined()
     const durationMs = performance.now() - readStartedAt!
     const { habitRows, completionRows, pageKeys } = await countRows(responses)
@@ -185,14 +195,13 @@ function expectExpectedPages(pageKeys: string[], sampleNumber: number): void {
   ).toEqual([...EXPECTED_PAGE_KEYS].sort())
 }
 
-test('3650 records load completely within the local paginated-read baseline', async ({ page }, testInfo) => {
+test('@performance 3650 records load completely within the local paginated-read baseline', async ({ page }, testInfo) => {
   test.setTimeout(90_000)
   await signUp(page, createAccount(testInfo))
   await importBenchmarkStore(page)
 
   await page.reload()
-  await expect(page.getByTestId('habit-row')).toHaveCount(HABIT_COUNT)
-  await expect(page.locator('.summary-panel')).toBeVisible()
+  await expectViewportReady(page)
 
   const samples: Sample[] = []
   for (let index = 0; index < SAMPLE_COUNT; index += 1) {

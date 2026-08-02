@@ -11,7 +11,9 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "pnpm test:e2e:functional && pnpm test:e2e:performance",
+    "test:e2e:functional": "playwright test --grep-invert \"@performance\"",
+    "test:e2e:performance": "playwright test tests/e2e/performance.spec.ts --workers=1"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-sc": "^5.3.0",
