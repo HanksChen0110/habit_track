@@ -1,9 +1,36 @@
-import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
+import { expect, test, type BrowserContext, type BrowserContextOptions, type Page, type TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 
 interface Account {
   email: string
   password: string
+}
+
+function projectContextOptions(testInfo: TestInfo): BrowserContextOptions {
+  const { baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = testInfo.project.use
+  return { baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch }
+}
+
+async function expectAccountControls(page: Page, email: string): Promise<void> {
+  const mobile = (page.viewportSize()?.width ?? 1024) < 1024
+  const visibleAccount = page.getByRole('group', { name: mobile ? '移动账号' : '桌面账号' })
+  const hiddenAccount = page.getByRole('group', { name: mobile ? '桌面账号' : '移动账号' })
+  await expect(visibleAccount).toBeVisible()
+  await expect(hiddenAccount).toBeHidden()
+
+  if (mobile) {
+    await expect(visibleAccount.getByText('本机数据', { exact: true })).toBeVisible()
+    const signOut = visibleAccount.getByRole('button', { name: '退出账号' })
+    await expect(signOut).toBeVisible()
+    const box = await signOut.boundingBox()
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44)
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+    return
+  }
+
+  await expect(visibleAccount.getByText('本机账号数据', { exact: true })).toBeVisible()
+  await expect(visibleAccount.getByLabel(`当前账号：${email}`)).toBeVisible()
+  await expect(visibleAccount.getByRole('button', { name: '退出账号' })).toBeVisible()
 }
 
 function createAccount(testInfo: TestInfo, suffix: string): Account {
@@ -29,12 +56,12 @@ async function signIn(page: Page, account: Account): Promise<void> {
   await page.getByLabel('邮箱').fill(account.email)
   await page.getByLabel('密码').fill(account.password)
   await page.getByRole('button', { name: '登录循迹' }).click()
-  await expect(page.getByLabel(`当前账号：${account.email}`)).toBeVisible()
+  await expectAccountControls(page, account.email)
 }
 
-async function startEmptyStore(page: Page): Promise<void> {
+async function startEmptyStore(page: Page, account: Account): Promise<void> {
   await page.getByRole('button', { name: '开始记录' }).click()
-  await expect(page.getByText('本机账号数据')).toBeVisible()
+  await expectAccountControls(page, account.email)
 }
 
 async function createHabit(page: Page, name: string, target = '3'): Promise<void> {
@@ -91,15 +118,17 @@ test('two isolated browser contexts persist one account while keeping a collidin
   let contextA: BrowserContext | undefined
   let contextSameAccount: BrowserContext | undefined
   let contextOtherAccount: BrowserContext | undefined
+  const contextOptions = projectContextOptions(testInfo)
 
   try {
-    contextA = await browser.newContext()
+    contextA = await browser.newContext(contextOptions)
     const pageA = await contextA.newPage()
+    expect(pageA.viewportSize()).toEqual(testInfo.project.use.viewport)
     await pageA.goto('/')
     const today = await localDate(pageA)
     await pageA.evaluate((value) => localStorage.setItem('xunji.store.v1', value), legacyStore)
     await signUp(pageA, accountA)
-    await startEmptyStore(pageA)
+    await startEmptyStore(pageA, accountA)
     await createHabit(pageA, habitName)
     const rowA = pageA.getByTestId('habit-row').filter({ hasText: habitName })
     await rowA.getByRole('button', { name: `${habitName}，增加一次` }).click()
@@ -109,8 +138,9 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await archivedRowA.getByRole('button', { name: `${archivedHabitName}，增加一次` }).click()
     await expect(archivedRowA.getByText('1 / 2')).toBeVisible()
 
-    contextSameAccount = await browser.newContext()
+    contextSameAccount = await browser.newContext(contextOptions)
     const pageSameAccount = await contextSameAccount.newPage()
+    expect(pageSameAccount.viewportSize()).toEqual(testInfo.project.use.viewport)
     await signIn(pageSameAccount, accountA)
     const rowSameAccount = pageSameAccount.getByTestId('habit-row').filter({ hasText: habitName })
     await expect(rowSameAccount.getByText('1 / 3')).toBeVisible()
@@ -128,12 +158,13 @@ test('two isolated browser contexts persist one account while keeping a collidin
     await signIn(pageA, accountA)
     await expect(rowA.getByText('2 / 3')).toBeVisible()
 
-    contextOtherAccount = await browser.newContext()
+    contextOtherAccount = await browser.newContext(contextOptions)
     const pageOtherAccount = await contextOtherAccount.newPage()
+    expect(pageOtherAccount.viewportSize()).toEqual(testInfo.project.use.viewport)
     await signUp(pageOtherAccount, accountB)
     await expect(pageOtherAccount.getByText(habitName)).toHaveCount(0)
     await expect(pageOtherAccount.getByText(archivedHabitName)).toHaveCount(0)
-    await startEmptyStore(pageOtherAccount)
+    await startEmptyStore(pageOtherAccount, accountB)
     await expect(pageOtherAccount.getByText(habitName)).toHaveCount(0)
     await expect(pageOtherAccount.getByText(archivedHabitName)).toHaveCount(0)
     await createHabit(pageOtherAccount, replacedHabitName)

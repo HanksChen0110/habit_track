@@ -27,6 +27,28 @@ function currentAccount(page: Page) {
   return account
 }
 
+async function expectAccountControls(page: Page, email: string) {
+  const mobile = (page.viewportSize()?.width ?? 1024) < 1024
+  const visibleAccount = page.getByRole('group', { name: mobile ? '移动账号' : '桌面账号' })
+  const hiddenAccount = page.getByRole('group', { name: mobile ? '桌面账号' : '移动账号' })
+  await expect(visibleAccount).toBeVisible()
+  await expect(hiddenAccount).toBeHidden()
+
+  if (mobile) {
+    await expect(visibleAccount.getByText('本机数据', { exact: true })).toBeVisible()
+    const signOut = visibleAccount.getByRole('button', { name: '退出账号' })
+    await expect(signOut).toBeVisible()
+    const box = await signOut.boundingBox()
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44)
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+    return
+  }
+
+  await expect(visibleAccount.getByText('本机账号数据', { exact: true })).toBeVisible()
+  await expect(visibleAccount.getByLabel(`当前账号：${email}`)).toBeVisible()
+  await expect(visibleAccount.getByRole('button', { name: '退出账号' })).toBeVisible()
+}
+
 test.beforeEach(async ({ page }, testInfo) => {
   await createTestAccount(page, testInfo)
 })
@@ -34,8 +56,7 @@ test.beforeEach(async ({ page }, testInfo) => {
 test('empty start, create, record and refresh recovery', async ({ page }) => {
   const { email } = currentAccount(page)
   await page.getByRole('button', { name: '开始记录' }).click()
-  await expect(page.getByText('本机账号数据')).toBeVisible()
-  await expect(page.getByLabel(`当前账号：${email}`)).toBeVisible()
+  await expectAccountControls(page, email)
   await page.getByRole('button', { name: '创建习惯', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '创建习惯' })
   await expect(dialog.getByRole('button', { name: '关闭创建习惯' })).toBeFocused()
@@ -78,7 +99,7 @@ test('wrong login stays gated and sign-out then re-login restores the account St
 
   await page.getByLabel('密码').fill(password)
   await page.getByRole('button', { name: '登录循迹' }).click()
-  await expect(page.getByLabel(`当前账号：${email}`)).toBeVisible()
+  await expectAccountControls(page, email)
   await expect(page.getByText('阅读 30 分钟')).toBeVisible()
 })
 
@@ -357,8 +378,9 @@ test('target viewports have no horizontal overflow and expose the correct naviga
 
   for (const width of widths) {
     await page.setViewportSize({ width, height: 900 })
-    await page.goto('/')
-    await expect(page.getByRole('link', { name: '今天', exact: true }).filter({ visible: true })).toBeVisible()
+    const todayLink = page.getByRole('link', { name: '今天', exact: true }).filter({ visible: true })
+    await expect(todayLink).toBeVisible()
+    await todayLink.click()
 
     if (width < 1024) {
       await expect(page.locator('.mobile-nav')).toBeVisible()
