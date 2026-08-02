@@ -8,8 +8,8 @@
 ## 当前位置
 
 - **活跃 Flow Kit Change**：`ci-quality-gates`
-- **当前阶段**：TASK（completed，用户授权自动继续）
-- **当前 Task**：T01 建立 ESLint 基线
+- **当前阶段**：DEV（执行中，已补 UI-DESIGN 门禁）
+- **当前 Task**：T03 修复 Oxlint 报告的两处真实违规
 - **中断任务**：无
 - **现有 OpenSpec 状态**：
   - `build-habit-review-mvp`：文件仍位于 `openspec/changes/`，`tasks.md` 已全部勾选；是当前 MVP 实施来源，不映射为 Flow Kit 活跃 change。— 来源：`@AGENTS.md:12-18`、`@openspec/changes/build-habit-review-mvp/tasks.md:1-48`
@@ -74,7 +74,7 @@ detected_stack: TypeScript + React 19 + Vite PWA + Supabase Auth/Data API + Post
 accepted_target_stack: Local Supabase for development and tests + Vercel frontend + Supabase Cloud Auth/Data API/Postgres/RLS for production
 pending_workspace_artifacts: none for local-postgres-backend; unrelated pre-existing docs/OpenSpec edits remain unstaged
 active_change_id: ci-quality-gates
-active_change_stage: task-complete
+active_change_stage: dev-in-progress
 
 # 架构演进
 last_architect_at: 2026-08-02
