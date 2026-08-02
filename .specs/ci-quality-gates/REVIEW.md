@@ -72,7 +72,7 @@ flowchart LR
   Lint & Typecheck & Tests & Build --> Ruleset[main required checks]
 ```
 
-**循环依赖**：无。  
+**循环依赖**：无。
 **反向依赖**：无。
 
 ---
