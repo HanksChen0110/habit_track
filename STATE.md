@@ -7,9 +7,9 @@
 
 ## 当前位置
 
-- **活跃 Flow Kit Change**：无
-- **当前阶段**：ARCHIVE（completed）
-- **当前 Task**：`mobile-performance-green` 已通过 UAT，归档至 `.specs/archive/2026-08-02-mobile-performance-green/`
+- **活跃 Flow Kit Change**：无；`onboarding-account-exit` 已撤回并保留原位作为误判更正记录
+- **当前阶段**：无活跃 change；生产账号与数据连通性 UAT 已通过
+- **当前 Task**：无
 - **中断任务**：无
 - **现有 OpenSpec 状态**：
   - `build-habit-review-mvp`：文件仍位于 `openspec/changes/`，`tasks.md` 已全部勾选；是当前 MVP 实施来源，不映射为 Flow Kit 活跃 change。— 来源：`@AGENTS.md:12-18`、`@openspec/changes/build-habit-review-mvp/tasks.md:1-48`
@@ -37,6 +37,8 @@
 
 ## 决策日志（最近 10 条，倒序）
 
+- `[2026-08-02]` 生产真实账号已注册并确认；示例初始化写入 3 条习惯，账号邮箱和“退出账号”可见，实际退出成功；用户重新登录后恢复同一账号的“学外语、跑步、阅读”3 条习惯，Vercel→Supabase Auth/Data API/Postgres 闭环 UAT 通过。`onboarding-account-exit` 源于过渡页误判，已撤回且不进入实现。— 来源：2026-08-02 用户截图、Chrome / Supabase 实测、`@harness-tool-audit.md`
+- `[2026-08-02]` Vercel Production 已发布 `main@71da466`，稳定域名为 `https://xunji-nu.vercel.app`；Production 环境变量使用 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_PUBLISHABLE_KEY`，Supabase Auth Site URL 已同步为该域名。— 来源：2026-08-02 Vercel / Supabase / Chrome 实测、`@harness-tool-audit.md`
 - `[2026-08-02]` `mobile-performance-green` 完成 INTEGRATION 并归档；修复 Modal 层级与响应式验证，功能 E2E 22/22、性能 2/2，desktop/mobile 均 20/20 完整且低于 1 秒。— 来源：`@.specs/archive/2026-08-02-mobile-performance-green/UAT.md`
 - `[2026-08-02]` 新建并 link Supabase 项目 `xunji-habit-review`（ref `hbxeltjioybgmxqjzeah`，Singapore）；4 个 migration 已通过 CLI push，远端历史一致、二次 dry-run 无待执行项。— 来源：2026-08-02 `supabase projects list`、`migration list --linked`、`db push --linked --dry-run`
 - `[2026-08-02]` 云端 Auth、匿名访问拒绝、`replace_user_store` RPC 与双账号 RLS 读写隔离均通过运行时烟雾测试；隔离测试用户及其级联业务数据已清理。— 来源：2026-08-02 Supabase Auth/Data API 实测
@@ -71,7 +73,7 @@ detected_stack: TypeScript + React 19 + Vite PWA + Supabase Auth/Data API + Post
 accepted_target_stack: Local Supabase for development and tests + Vercel frontend + Supabase Cloud Auth/Data API/Postgres/RLS for production
 pending_workspace_artifacts: none for local-postgres-backend; unrelated pre-existing docs/OpenSpec edits remain unstaged
 active_change_id:
-active_change_stage: archive-complete
+active_change_stage:
 
 # 架构演进
 last_architect_at: 2026-08-02
@@ -87,6 +89,7 @@ last_health_score:
 
 | 日期 | 命令 | 结果 | 说明 |
 |---|---|---|---|
+| 2026-08-02 | Vercel Production + Chrome→Supabase Auth/Data API/Postgres | 通过 | `main@71da466` 部署 Ready；真实账号注册成功；3 条习惯写入和读取一致；账号显示、退出和重新登录通过，重新登录后恢复同一账号的 3 条习惯 |
 | 2026-08-02 | INTEGRATION 全量门禁 | 通过 | typecheck；Vitest 188；pgTAP 174；build；E2E 功能 22 + 性能 2；desktop P95 440.0ms、mobile P95 333.9ms |
 | 2026-08-02 | `supabase db push --linked`、`migration list --linked`、二次 `db push --linked --dry-run`、`db lint --linked`、`gen types --project-id` | 通过 | 新云端项目应用 4 个 migration；远端历史一致、无待执行、lint 0；三表与 `replace_user_store` 类型契约存在 |
 | 2026-08-02 | 云端 Auth/Data API 隔离烟雾测试 | 通过 | 两个临时已确认账号可登录；匿名表访问被拒；`replace_user_store` 返回预期 Store；所有者可读、另一账号不可读写；测试账号与级联数据清理完成 |
