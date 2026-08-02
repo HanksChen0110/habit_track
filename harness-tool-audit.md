@@ -17,3 +17,4 @@
 | 2026-08-02 11:11:26 +08:00 | `pnpm exec supabase db push --linked --yes` | 向新云端项目 `xunji-habit-review` 顺序发布 4 个本地 migration | 是，用户已明确授权云端 migration 发布 | 成功；远端历史一致，二次 dry-run 为空，lint 0 | 临时最小 TASK：云端 migration 发布 |
 | 2026-08-02 11:11:26 +08:00 | Supabase Auth Admin / Data API | 创建两个隔离测试账号验证 Auth、匿名拒绝、RPC 与跨账号 RLS，随后删除测试账号及级联数据 | 是，用户已授权云端后端验证 | 成功；全部烟雾测试通过，残留测试账号为 0 | 临时最小 TASK：云端运行时验证 |
 | 2026-08-02 11:10:00 +08:00 | `Move-Item` | 归档 `.specs/mobile-performance-green/` 到 `.specs/archive/2026-08-02-mobile-performance-green/` | 是，用户已授权完整交付与后续任务全部通行 | 成功，11 个工件完整移动 | INTEGRATION / ARCHIVE |
+| 2026-08-02 11:18:49 +08:00 | `git push -u origin codex/local-postgres-backend` | 创建远端交付分支，并以 follow-up fast-forward 同步本审计记录 | 是，用户在本轮明确要求 commit + push | 成功；远端分支已创建并建立 upstream | FINAL DELIVERY |
